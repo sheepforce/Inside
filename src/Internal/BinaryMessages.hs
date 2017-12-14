@@ -1,7 +1,8 @@
 module Internal.BinaryMessages
-( someFunc
+( 
 ) where
 import qualified Data.ByteString as B
+import           Data.HexString
+import           Data.Word
 
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+-- take a hexadecimal and convert to ByteString
