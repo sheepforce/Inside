@@ -2,38 +2,73 @@ module Hardware.Vacom.Coldion
 ( CICommand
 , CIString
 ) where
-import qualified Data.ByteString         as B
-import qualified Data.ByteString.Builder as B
-import qualified Data.ByteString.Char8   as C
-import           Data.Maybe
+--import qualified Data.ByteString               as B
+--import qualified Data.ByteString.Builder       as B
+--import qualified Data.ByteString.Char8         as C
+--import qualified Data.ByteString.Conversion.To as B
+--import           Data.Maybe
 import           Data.Word
 import           Internal.BinaryMessages
 
+-- commands known to the Coldion AND this programm
 data CICommand =
   AskPressure
   deriving Show
 
+-- structure of communication strings from and to the device
 data CIString = CIString
-  { ci_start          :: Word8
-  , ci_header         :: Word8
-  , ci_adressReceiver :: Word8
-  , ci_adressSender   :: Word8
-  , ci_command        :: Word8
-  , ci_subcommand     :: Word8
-  , ci_data           :: [Word8]
-  , ci_checksum       :: (Word8, Word8)
-  } deriving Eq
+  { ci_start          :: Word8          -- the start byte (A5)
+  , ci_header         :: Word8          -- the header byte
+  , ci_adressReceiver :: Word8          -- adress of the receiver (00 for RS232)
+  , ci_adressSender   :: Word8          -- adress of the sender (00 for RS232)
+  , ci_command        :: (Word8, Word8) -- command and subcommand
+  , ci_data           :: ( Word8        -- the data bytes, 16 of them
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8
+                         , Word8 )
+  , ci_checksum       :: (Word8, Word8) -- the checksum, two bytes
+  }
 
 instance Show CIString where
-  show (CIString a b c d e f g h) =
-    show (B.toLazyByteString $ B.word8Hex a) ++ " " ++
-    show (B.toLazyByteString $ B.word8Hex b) ++ " " ++
-    show (B.toLazyByteString $ B.word8Hex c) ++ " " ++
-    show (B.toLazyByteString $ B.word8Hex e) ++ " " ++
-    show (B.toLazyByteString $ B.word8Hex f) ++ " " ++
-    show (B.toLazyByteString $ B.word8Hex g) ++ " " ++
-    show (B.toLazyByteString $ B.word8Hex a) ++ " " ++
-    show (B.toLazyByteString $ B.word8Hex a) ++ " "
+  show (CIString a b c d e f g) =
+    (word8String a) ++ " " ++
+    word8String b ++ " " ++
+    word8String c ++ " " ++
+    word8String d ++ " " ++
+    (word8String . fst $ e) ++ " " ++
+    (word8String . snd $ e) ++ " " ++
+    (word8String . (\(a, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, a, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, a, _, _, _, _, _, _, _, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, a, _, _, _, _, _, _, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, a, _, _, _, _, _, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, a, _, _, _, _, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, a, _, _, _, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, _, a, _, _, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, _, _, a, _, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, _, _, _, a, _, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, _, _, _, _, a, _, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, _, _, _, _, _, a, _, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, _, _, _, _, _, _, a, _, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, _, _, _, _, _, _, _, a, _, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, _, _, _, _, _, _, _, _, a, _) -> a) $ f) ++ " " ++
+    (word8String . (\(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, a) -> a) $ f) ++ " " ++
+    (word8String . fst $ g) ++ " " ++
+    (word8String . snd $ g)
+
+
 
 
 --showCIString a = "Im a CIString" :: CIString -> String
