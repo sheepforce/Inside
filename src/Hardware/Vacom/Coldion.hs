@@ -8,14 +8,14 @@ import qualified Data.ByteString               as B
 import qualified Data.ByteString.Builder       as B
 import qualified Data.ByteString.Char8         as C
 import qualified Data.ByteString.Conversion.To as B
---import           Data.Maybe
+import           Data.Maybe
 import           Data.Word
 import           Internal.BinaryMessages
 
 -- commands known to the Coldion AND this programm
 data CICommand =
-  AskPressure
-  deriving Show
+  AskPressure Int
+  deriving (Show, Eq)
 
 -- structure of communication strings from and to the device
 data CIString = CIString
@@ -109,11 +109,60 @@ ciString2Word8s input =
 ciString2ByteString :: CIString -> B.ByteString
 ciString2ByteString = B.pack . ciString2Word8s
 
-
---showCIString a = "Im a CIString" :: CIString -> String
-{-
-https://www.google.de/url?sa=t&rct=j&q=&esrc=s&source=web&cd=1&cad=rja&uact=8&ved=0ahUKEwiV39bZ0YnYAhXJa1AKHQm6DFIQFggoMAA&url=https%3A%2F%2Fwww.vacom.de%2Fen%2Fdownloads%2Fcategory%2F775-total-pressure-measurement%3Fdownload%3D2901%3Acoldion-cu-100-manual&usg=AOvVaw2rDyABYrgVWgiiAOU-JRJS
-a command to the cold ion consists of 24 Bytes. See the Coldion manual for more
-informations. The non changing body (head, check sum, ...) is built and one of
-the CICommand can be given. The resulting Bytestring with 24 Bytes is built.
--}
+-- create a CIString for given Commands
+createCommandCIString :: CICommand -> Maybe CIString
+createCommandCIString a
+  | a == AskPressure 1 =
+    Just CIString { ci_start          = startB
+                  , ci_header         = headerB
+                  , ci_adressReceiver = adressReceiverB
+                  , ci_adressSender   = adressSenderB
+                  , ci_command        = (0x20, 0x10)
+                  , ci_data           = ( 0x01
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00 )
+                  , ci_checksum       = (0xFF, 0x8C)
+                  }
+  | a == AskPressure 2 =
+    Just CIString { ci_start          = startB
+                  , ci_header         = headerB
+                  , ci_adressReceiver = adressReceiverB
+                  , ci_adressSender   = adressSenderB
+                  , ci_command        = (0x20, 0x10)
+                  , ci_data           = ( 0x02
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00
+                                        , 0x00 )
+                  , ci_checksum       = (0xBF, 0x7D)
+                  }
+  | otherwise          = Nothing
+  where
+    startB = 0xA5
+    headerB = 0x50
+    adressReceiverB = 0x00
+    adressSenderB = 0x00

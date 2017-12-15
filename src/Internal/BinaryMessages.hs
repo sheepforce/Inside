@@ -3,13 +3,12 @@ module Internal.BinaryMessages
 , stringWord8
 , word16Word8
 ) where
---import qualified Data.ByteString               as B
+import           Data.Bits
 import qualified Data.ByteString.Builder       as B
 import qualified Data.ByteString.Char8         as C
 import           Data.ByteString.Conversion.To as B
 import           Data.HexString
 import           Data.Word
-import Data.Bits
 
 -- take 1 Byte (Word8) and convert to a string, giving the value of the byte
 -- in hexadecimal notation
