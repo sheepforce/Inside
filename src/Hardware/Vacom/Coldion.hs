@@ -45,7 +45,7 @@ data CIString = CIString
 
 instance Show CIString where
   show (CIString a b c d e f g) =
-    (word8String a) ++ " " ++
+    word8String a ++ " " ++
     word8String b ++ " " ++
     word8String c ++ " " ++
     word8String d ++ " " ++
