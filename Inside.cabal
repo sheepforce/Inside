@@ -32,6 +32,7 @@ library
     , hexstring >= 0.11.1
     , bytestring >= 0.10.8.0
     , bytestring-conversion >= 0.2
+    , lens >= 4.15.0
   exposed-modules:
       Internal.BinaryMessages
     , Hardware.Vacom.Coldion
