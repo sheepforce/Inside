@@ -35,7 +35,7 @@ library
     , lens >= 4.15.0
     , brick >= 0.18
     , attoparsec >= 0.13.1.0
-    , either-unwrap
+    , either-unwrap >= 1.1
   exposed-modules:
       Internal.BinaryMessages
     , Hardware.Vacom.Coldion
@@ -51,5 +51,7 @@ executable inside
       base >= 4.7 && < 5
     , brick >= 0.18
     , vty >= 5.16
+    , microlens >= 0.4.8.1
+    , microlens-th >= 0.4.1.1
     , Inside
   default-language: Haskell2010

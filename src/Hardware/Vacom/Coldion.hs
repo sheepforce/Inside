@@ -1,7 +1,17 @@
+-- | Module for talking to the Vacom Coldion CU-100. A serial RS232 port
+-- | is used for communication. 24 Bytes are sent and received through
+-- | this interface. For description of the protocoll see:
+-- | https://www.vacom.de/en/downloads/category/775-total-pressure-measurement?download=3038:vacom-protocol-for-beginners
+-- | https://www.vacom.de/en/downloads/category/775-total-pressure-measurement?download=2901:coldion-cu-100-manual
+-- |
+-- | No IO is done within this module, everything here is pure and very
+-- | specifically tuned to be used with Vacom gauges
+
 {-# LANGUAGE TemplateHaskell #-}
+
 module Hardware.Vacom.Coldion
-( CICommand
-, CIString
+( CICommand(..)
+, CIString(..)
 , ciString2ByteString
 , createCommandCIString
 , parseAnswer
@@ -9,9 +19,6 @@ module Hardware.Vacom.Coldion
 ) where
 import           Control.Lens
 import qualified Data.ByteString                  as B
---import qualified Data.ByteString.Builder       as B
---import qualified Data.ByteString.Char8         as C
---import qualified Data.ByteString.Conversion.To as B
 import           Data.Attoparsec.ByteString.Char8
 import           Data.Attoparsec.ByteString.Lazy
 import           Data.Maybe
@@ -32,12 +39,15 @@ fromAskPressure :: CICommand -> Maybe Word8
 fromAskPressure (AskPressure a) = Just a
 fromAskPressure _               = Nothing
 
+
+-- | the protocol transmits exactly 16 Bytes of data
 type DataBytes =
   ( Word8, Word8, Word8, Word8
   , Word8, Word8, Word8, Word8
   , Word8, Word8, Word8, Word8
   , Word8, Word8, Word8, Word8 )
 
+-- | convert between the 16 element tuple "DataBytes" and a list of Word8
 dataBytes2List :: DataBytes -> [Word8]
 dataBytes2List a =
   [ a^._1 , a^._2 , a^._3 , a^._4
@@ -52,6 +62,7 @@ list2DataBytes a =
   , a !! 8 , a !! 9 , a !! 10, a !! 11
   , a !! 12, a !! 13, a !! 14, a !! 15 )
 
+
 -- | structure of communication strings from and to the device
 data CIString = CIString
   { _ci_start          :: Word8          -- the start byte (A5)
@@ -64,6 +75,7 @@ data CIString = CIString
   }
 makeLenses ''CIString
 
+-- how to print a CIString (the hexadecimal representation of each Byte)
 instance Show CIString where
   show a = concat . map ((++ " ") . word8String). ciString2Word8s $ a
 
@@ -179,7 +191,7 @@ parseAnswer = do
     , _ci_checksum = ci_checksum
     }
 
--- from a ByteString only containing DataBytes get the pressure
+-- | get the pressure from a ByteString only containing DataBytes
 parsePressure :: Parser Double
 parsePressure = do
     pressure <- double
