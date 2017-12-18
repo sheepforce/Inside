@@ -34,6 +34,8 @@ library
     , bytestring-conversion >= 0.2
     , lens >= 4.15.0
     , brick >= 0.18
+    , attoparsec >= 0.13.1.0
+    , either-unwrap
   exposed-modules:
       Internal.BinaryMessages
     , Hardware.Vacom.Coldion
@@ -44,9 +46,10 @@ executable inside
   main-is: inside.hs
   hs-source-dirs:
       app
-  ghc-options: -Wall
+  ghc-options: -Wall -threaded
   build-depends:
       base >= 4.7 && < 5
     , brick >= 0.18
+    , vty >= 5.16
     , Inside
   default-language: Haskell2010

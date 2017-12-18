@@ -4,12 +4,16 @@ module Hardware.Vacom.Coldion
 , CIString
 , ciString2ByteString
 , createCommandCIString
+, parseAnswer
+, parsePressure
 ) where
 import           Control.Lens
-import qualified Data.ByteString         as B
+import qualified Data.ByteString                  as B
 --import qualified Data.ByteString.Builder       as B
 --import qualified Data.ByteString.Char8         as C
 --import qualified Data.ByteString.Conversion.To as B
+import           Data.Attoparsec.ByteString.Char8
+import           Data.Attoparsec.ByteString.Lazy
 import           Data.Maybe
 import           Data.Word
 import           Internal.BinaryMessages
@@ -20,12 +24,6 @@ data CICommand =
   | GetDevName
   deriving (Show, Eq)
 
-type DataBytes =
-  ( Word8, Word8, Word8, Word8
-  , Word8, Word8, Word8, Word8
-  , Word8, Word8, Word8, Word8
-  , Word8, Word8, Word8, Word8 )
-
 isAskPressure :: CICommand -> Bool
 isAskPressure (AskPressure _ ) = True
 isAskPressure _                = False
@@ -33,6 +31,26 @@ isAskPressure _                = False
 fromAskPressure :: CICommand -> Maybe Word8
 fromAskPressure (AskPressure a) = Just a
 fromAskPressure _               = Nothing
+
+type DataBytes =
+  ( Word8, Word8, Word8, Word8
+  , Word8, Word8, Word8, Word8
+  , Word8, Word8, Word8, Word8
+  , Word8, Word8, Word8, Word8 )
+
+dataBytes2List :: DataBytes -> [Word8]
+dataBytes2List a =
+  [ a^._1 , a^._2 , a^._3 , a^._4
+  , a^._5 , a^._6 , a^._7 , a^._8
+  , a^._9 , a^._10, a^._11, a^._12
+  , a^._13, a^._14, a^._15, a^._16 ]
+
+list2DataBytes :: [Word8] -> DataBytes
+list2DataBytes a =
+  ( a !! 0 , a !! 1 , a !! 2 , a !! 3
+  , a !! 4 , a !! 5 , a !! 6 , a !! 7
+  , a !! 8 , a !! 9 , a !! 10, a !! 11
+  , a !! 12, a !! 13, a !! 14, a !! 15 )
 
 -- | structure of communication strings from and to the device
 data CIString = CIString
@@ -129,3 +147,41 @@ createCommandCIString a
   | otherwise = Nothing
   where
     pressureChannel = fromAskPressure a
+
+-- | parse the answer for a pressure request
+parseAnswer :: Parser CIString
+parseAnswer = do
+  -- parse 24 bytes of data from the answer ByteString
+  answer_ci_start <- word8 0xA5
+  answer_ci_header <- word8 0x70
+  answer_ci_adressReceiver <- word8 0x00
+  answer_ci_adressSender <- word8 0x00
+  answer_ci_command <- anyWord8
+  answer_ci_subcommand <- anyWord8
+  answer_ci_data_bs <- Data.Attoparsec.ByteString.Lazy.take 16
+  answer_ci_checksum_bs <- Data.Attoparsec.ByteString.Lazy.take 2
+
+  -- transform ci_data from ByteString to DataBytes
+  -- and the checksum to a tuple
+  let ci_data = list2DataBytes . B.unpack $ answer_ci_data_bs
+      ci_checksum =
+        ( B.unpack answer_ci_checksum_bs !! 0
+        , B.unpack answer_ci_checksum_bs !! 1 )
+
+  -- return the answer as a CIString
+  return CIString
+    { _ci_start = answer_ci_start
+    , _ci_header = answer_ci_header
+    , _ci_command = (answer_ci_command, answer_ci_subcommand)
+    , _ci_adressReceiver = answer_ci_adressReceiver
+    , _ci_adressSender = answer_ci_adressSender
+    , _ci_data = ci_data
+    , _ci_checksum = ci_checksum
+    }
+
+-- from a ByteString only containing DataBytes get the pressure
+parsePressure :: Parser Double
+parsePressure = do
+    pressure <- double
+
+    return pressure
