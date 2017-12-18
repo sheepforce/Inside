@@ -16,7 +16,8 @@ import           Internal.BinaryMessages
 
 -- | commands known to the Coldion AND this programm
 data CICommand =
-  AskPressure Word8
+    AskPressure Word8
+  | GetDevName
   deriving (Show, Eq)
 
 type DataBytes =
@@ -120,6 +121,11 @@ createCommandCIString a
     & ci_command .~ (0x20, 0x10)
     & (ci_data . _1) .~ fromJust pressureChannel
     & ci_checksum .~ (0xBF, 0x7D)
+  | a == GetDevName =
+    Just
+    $ defCIString
+    & ci_command .~ (0x01, 0x00)
+    & ci_checksum .~ (0x69, 0xEF)
   | otherwise = Nothing
   where
     pressureChannel = fromAskPressure a
