@@ -18,6 +18,7 @@ module Hardware.Vacom.Coldion
 , createCommandCIString
 , parseAnswer
 , parsePressure
+, parseName
 ) where
 import           Control.Lens
 import qualified Data.ByteString                  as B
@@ -199,3 +200,9 @@ parsePressure = do
     pressure <- double
 
     return pressure
+
+parseName :: Parser String
+parseName = do
+  name <- Data.Attoparsec.ByteString.Lazy.takeTill (== 0x00)
+
+  return $ show name
