@@ -33,7 +33,8 @@ library
     , bytestring >= 0.10.8.0
     , bytestring-conversion >= 0.2
     , lens >= 4.15.0
-    , brick >= 0.18
+    , microlens >= 0.4.8.1
+    , microlens-th >= 0.4.1.1
     , attoparsec >= 0.13.1.0
     , either-unwrap >= 1.1
   exposed-modules:
@@ -53,5 +54,9 @@ executable inside
     , vty >= 5.16
     , microlens >= 0.4.8.1
     , microlens-th >= 0.4.1.1
+    , serialport >= 0.4.7
+    , attoparsec >= 0.13.1.0
+    , either-unwrap >= 1.1
+    , bytestring >= 0.10.8.0
     , Inside
   default-language: Haskell2010

@@ -12,6 +12,8 @@
 module Hardware.Vacom.Coldion
 ( CICommand(..)
 , CIString(..)
+, dataBytes2List
+, list2DataBytes
 , ciString2ByteString
 , createCommandCIString
 , parseAnswer

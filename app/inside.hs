@@ -14,6 +14,12 @@ import qualified Graphics.Vty               as V
 import qualified Hardware.Vacom.Coldion     as CI
 import           Lens.Micro
 import           Lens.Micro.TH
+import System.Hardware.Serialport
+import qualified Data.ByteString                  as B
+import           Data.Attoparsec.ByteString.Char8
+import           Data.Attoparsec.ByteString.Lazy
+import Data.Either.Unwrap
+import Control.Monad.IO.Class
 
 
 {- ########################################################################## -}
@@ -34,6 +40,7 @@ type Pressure = Double
 data ColdIon = ColdIon
   { _task     :: CI.CICommand
   , _port     :: FilePath
+  , _channel  :: Word8
   , _pressure :: Maybe Pressure
   , _devName  :: Maybe String
   } deriving (Show)
@@ -55,7 +62,7 @@ makeLenses ''Measurements
 {- ########################################################################## -}
 -- | defining the Brick app type
 app = App
-  { appDraw         = coldionWidget                  -- these are the visual elements
+  { appDraw         = drawUI                  -- these are the visual elements
                                               -- shown (aka layout), as well as
                                               -- the functionality the have
 
@@ -74,30 +81,86 @@ app = App
                                               -- changed
   }
 
+-- | the user interface, composed of individual Widgets
+drawUI :: Measurements -> [Widget Name]
+drawUI m = [ BC.center $ (coldionWidgetPressure m) <=> (deviceWidgetColdIon m)]
+
 -- | widget for holding the Coldion pressure
-coldionWidget :: Measurements -> [Widget Name]
-coldionWidget m =
-  [
-  hLimit 15
+coldionWidgetPressure :: Measurements -> Widget Name
+coldionWidgetPressure m =
+  hLimit 20
   $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str devName)
+  $ BB.borderWithLabel (str shownDevName)
   $ BC.hCenter
   $ padAll 1
-  $ str $ show $ fromMaybe 0.0 (m ^. (coldIon . pressure))
-  ]
+  $ str $ show shownPressure
   where
-    devName = "ColdIon CU-100"
-    -- pressure = (m ^. (coldIon . pressure)) :: Double
+    shownDevName = fromMaybe "ColdIon CU-100" $ m ^. (coldIon . devName)
+    shownPressure = fromMaybe 0.0 $ m ^. (coldIon . pressure)
+
+-- | showing the parameters of the devices (ports, ...)
+deviceWidgetColdIon :: Measurements -> Widget Name
+deviceWidgetColdIon m =
+  hLimit 50
+  $ withBorderStyle BBS.unicodeBold
+  $ BB.borderWithLabel (str "Device Configuration")
+  $ padAll 2
+  $ str
+  $  "ColdIon CU-100\n\n"
+  ++ "  Port:\n"
+  ++ "    " ++ shownPort
+
+  where
+    shownPort = show $ m ^. (coldIon . port)
 
 
--- | handling tick event
+-- | handling events that occur. These are the ticks, fed into the app as well
+-- | as the keys pressed
 handleEvent :: Measurements -> BrickEvent Name Tick -> EventM Name (Next Measurements)
-handleEvent m (AppEvent Tick)                = continue m
+handleEvent m (AppEvent Tick)                = liftIO (getCurrentConditions m) >>= continue
 handleEvent m (VtyEvent (V.EvKey V.KEsc [])) = halt m
+
+-- | IO function
+getCurrentConditions :: Measurements -> IO Measurements
+getCurrentConditions m = do
+  newColdIonPressure <- coldIonPressureUpdate m  -- update pressure of ColdIon
+
+  return $
+    m & coldIon . pressure .~ newColdIonPressure -- write pressure of ColdIon
+
+-- | sending, receiving and understanding an request to the ColdIon.
+-- | port of the ColdIon comes from the Measurement
+-- | this is a dangerous function. which can fail badly
+coldIonPressureUpdate :: Measurements -> IO (Maybe Double)
+coldIonPressureUpdate m = do
+  ci <- openSerial coldIonPort defaultSerialSettings { commSpeed = CS19200 }
+  if isNothing ciRequest
+    then return Nothing
+    else do
+      send ci $ CI.ciString2ByteString . fromJust $ ciRequest
+      ciAnswer <- recv ci 24
+
+      -- we expect it not to fail at this position. Be carefull!
+      let ciAnswerCIString = fromRight $ parseOnly CI.parseAnswer ciAnswer
+          ciPressure =
+            fromRight
+            $ parseOnly CI.parsePressure
+            $ B.pack
+            . CI.dataBytes2List
+            . CI._ci_data
+            $ ciAnswerCIString
+
+      return $ Just ciPressure
+
+  where
+    coldIonPort = m ^. coldIon . port
+    ciChannel = m ^. coldIon . channel
+    ciRequest = CI.createCommandCIString (CI.AskPressure ciChannel)
+
+
 
 theMeasurements :: AttrMap
 theMeasurements = attrMap V.defAttr [("pressureAttr" :: AttrName, V.red `on` V.blue)]
-
 
 initColdIon = ColdIon
   { _task = CI.GetDevName
