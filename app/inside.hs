@@ -140,17 +140,23 @@ coldIonPressureUpdate m = do
       send ci $ CI.ciString2ByteString . fromJust $ ciRequest
       ciAnswer <- recv ci 24
 
-      -- we expect it not to fail at this position. Be carefull!
-      let ciAnswerCIString = fromRight $ parseOnly CI.parseAnswer ciAnswer
-          ciPressure =
-            fromRight
-            $ parseOnly CI.parsePressure
-            $ B.pack
-            . CI.dataBytes2List
-            . CI._ci_data
-            $ ciAnswerCIString
+      -- This is perfectly safe function returning Nothing if it fails.
+      -- nevertheless; it is an IO function, therefore we have IO type
+      let ciAnswerCIString = parseOnly CI.parseAnswer ciAnswer
 
-      return $ Just ciPressure
+      if isRight ciAnswerCIString
+        then do
+          let ciPressure =
+                parseOnly CI.parsePressure
+                $ B.pack
+                . CI.dataBytes2List
+                . CI._ci_data
+                $ fromRight ciAnswerCIString
+
+          if (isRight ciPressure)
+            then return $ Just (fromRight ciPressure)
+            else return Nothing
+        else return Nothing
 
   where
     coldIonPort = m ^. coldIon . port
@@ -165,6 +171,7 @@ theMeasurements = attrMap V.defAttr [("pressureAttr" :: AttrName, V.red `on` V.b
 initColdIon = ColdIon
   { _task = CI.GetDevName
   , _port = "/dev/ttyUSB0"
+  , _channel = 0x01
   , _pressure = Nothing
   , _devName = Nothing
   }
@@ -178,7 +185,7 @@ main = do
   chan <- newBChan 10
   forkIO $ forever $ do
     writeBChan chan Tick
-    threadDelay 100000
+    threadDelay 1000000
 
 
 
