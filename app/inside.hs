@@ -164,7 +164,7 @@ lakeShoreWidgetTemperature m =
     tempB =
       if isNothing maybeTemps
         then Nothing
-        else Just $ fst . fromJust $ maybeTemps
+        else Just $ snd . fromJust $ maybeTemps
 
 
 {- ########################################################################## -}
@@ -258,11 +258,15 @@ lakeShoreTempUpdate m = do
   ls <- openSerial lakeShorePort defaultSerialSettings {commSpeed = CS57600, bitsPerWord = 7, parity = Odd}
   _ <- send ls $ fromJust lakeShoreRequestA
   lakeShoreAnswerA <- recv ls 255
+  closeSerial ls
+
+  ls <- openSerial lakeShorePort defaultSerialSettings {commSpeed = CS57600, bitsPerWord = 7, parity = Odd}
   _ <- send ls $ fromJust lakeShoreRequestB
   lakeShoreAnswerB <- recv ls 255
+  closeSerial ls
 
   let lakeShoreTempA = AB.parseOnly LS.parseTemperature lakeShoreAnswerA
-      lakeShoreTempB = AB.parseOnly LS.parseTemperature lakeShoreAnswerA
+      lakeShoreTempB = AB.parseOnly LS.parseTemperature lakeShoreAnswerB
 
   if (isLeft lakeShoreTempA || isLeft lakeShoreTempB)
     then return Nothing
