@@ -2,24 +2,28 @@
 {-# LANGUAGE TemplateHaskell   #-}
 
 import           Brick
-import           Brick.BChan                (newBChan, writeBChan)
-import qualified Brick.Widgets.Border       as BB
-import qualified Brick.Widgets.Border.Style as BBS
-import qualified Brick.Widgets.Center       as BC
-import           Control.Concurrent         (forkIO, threadDelay)
-import           Control.Monad              (forever, void)
+import           Brick.BChan                     (newBChan, writeBChan)
+import qualified Brick.Widgets.Border            as BB
+import qualified Brick.Widgets.Border.Style      as BBS
+import qualified Brick.Widgets.Center            as BC
+import           Control.Concurrent              (forkIO, threadDelay)
+import           Control.Monad                   (forever, void)
+import           Control.Monad.IO.Class
+import qualified Data.Attoparsec.ByteString.Lazy as AB
+import           Data.Attoparsec.Text.Lazy
+import qualified Data.ByteString                 as B
+import           Data.Either.Unwrap
 import           Data.Maybe
+import qualified Data.Text                       as T
+import qualified Data.Text.IO                    as T
 import           Data.Word
-import qualified Graphics.Vty               as V
-import qualified Hardware.Vacom.Coldion     as CI
+import qualified Graphics.Vty                    as V
+import qualified Hardware.Vacom.Coldion          as CI
 import           Lens.Micro
 import           Lens.Micro.TH
-import System.Hardware.Serialport
-import qualified Data.ByteString                  as B
---import           Data.Attoparsec.ByteString.Char8
-import           Data.Attoparsec.ByteString.Lazy (parseOnly)
-import Data.Either.Unwrap
-import Control.Monad.IO.Class
+import           System.Hardware.Serialport
+import           Control.Applicative
+import qualified Hardware.LakeShore.TemperatureController as LS
 
 
 {- ########################################################################## -}
@@ -38,23 +42,33 @@ type Name = ()
 -- | /dev/ttyUSB0) the device is connected
 type Pressure = Double
 data ColdIon = ColdIon
-  { _task     :: CI.CICommand
-  , _port     :: FilePath
-  , _channel  :: Word8
-  , _pressure :: Maybe Pressure
-  , _devName  :: Maybe String
+  { _ciTask     :: CI.CICommand
+  , _ciPort     :: FilePath
+  , _ciChannel  :: Word8
+  , _ciPressure :: Maybe Pressure
+  , _ciDevName  :: Maybe String
   } deriving (Show)
 makeLenses ''ColdIon
+
+-- | Ther LakeShore 335 interface. What it should do and on which port (something
+-- | like /dev/ttyUSB0) the device is connected
+type Temperatures = (Double, Double)
+data LakeShore = LakeShore
+  { _lsTask :: LS.LSCommand
+  , _lsPort :: FilePath
+  , _lsTemperatures :: Maybe Temperatures
+  , _lsDevName :: Maybe String
+  } deriving (Show)
+makeLenses ''LakeShore
 
 -- | The user interface mainly takes care of displaying things. Therefore
 -- | the state of our app is only described by tasks for specific devices, that
 -- | shall be carried out in the current loop
 data Measurements = Measurements
-  { _coldIon :: ColdIon -- what is the Coldion CU-100 supposed to do?
+  { _coldIon :: ColdIon     -- infos about the Coldion CU-100
+  , _lakeShore :: LakeShore -- infos about the LakeShore 335
   } deriving (Show)
 makeLenses ''Measurements
-
-
 
 
 {- ########################################################################## -}
@@ -84,8 +98,14 @@ app = App
 
 -- | the user interface, composed of individual Widgets
 drawUI :: Measurements -> [Widget Name]
-drawUI m = [ BC.center $ (coldionWidgetPressure m) <=> (deviceWidgetColdIon m)]
+drawUI m =
+  [ BC.center  -- $(coldionWidgetPressure m) <=> (deviceWidgetColdIon m)]
+  $ hBox [coldionWidgetPressure m, lakeShoreWidgetTemperature m] <=> deviceWidgetColdIon m
+  ]
 
+{- ======= -}
+{- ColdIon -}
+{- ======= -}
 -- | widget for holding the Coldion pressure
 coldionWidgetPressure :: Measurements -> Widget Name
 coldionWidgetPressure m =
@@ -96,8 +116,8 @@ coldionWidgetPressure m =
   $ padAll 1
   $ str $ show shownPressure
   where
-    shownDevName = fromMaybe "ColdIon CU-100" $ m ^. (coldIon . devName)
-    shownPressure = fromMaybe 0.0 $ m ^. (coldIon . pressure)
+    shownDevName = fromMaybe "ColdIon CU-100" $ m ^. (coldIon . ciDevName)
+    shownPressure = fromMaybe 0.0 $ m ^. (coldIon . ciPressure)
 
 -- | showing the parameters of the devices (ports, ...)
 deviceWidgetColdIon :: Measurements -> Widget Name
@@ -116,11 +136,40 @@ deviceWidgetColdIon m =
   ++ "    " ++ show shownDevName
 
   where
-    shownPort = m ^. (coldIon . port)
-    shownChannel = show $ m ^. (coldIon . channel)
-    shownDevName = m ^. (coldIon . devName)
+    shownPort = m ^. (coldIon . ciPort)
+    shownChannel = show $ m ^. (coldIon . ciChannel)
+    shownDevName = m ^. (coldIon . ciDevName)
+
+{- ========= -}
+{- LakeShore -}
+{- ========= -}
+lakeShoreWidgetTemperature :: Measurements -> Widget Name
+lakeShoreWidgetTemperature m =
+  hLimit 20
+  $ withBorderStyle BBS.unicodeBold
+  $ BB.borderWithLabel (str shownDevName)
+  $ BC.hCenter
+  $ padAll 1
+  $ vBox
+  [ str $ show $ fromMaybe 0.0 tempA
+  , str $ show $ fromMaybe 0.0 tempB
+  ]
+  where
+    shownDevName = fromMaybe "LakeShore 335" $ m ^. (lakeShore . lsDevName)
+    maybeTemps = m ^. (lakeShore . lsTemperatures)
+    tempA =
+      if isNothing maybeTemps
+        then Nothing
+        else Just $ fst . fromJust $ maybeTemps
+    tempB =
+      if isNothing maybeTemps
+        then Nothing
+        else Just $ fst . fromJust $ maybeTemps
 
 
+{- ########################################################################## -}
+{- Define EventHandling -}
+{- ########################################################################## -}
 -- | handling events that occur. These are the ticks, fed into the app as well
 -- | as the keys pressed
 handleEvent :: Measurements -> BrickEvent Name Tick -> EventM Name (Next Measurements)
@@ -132,95 +181,169 @@ handleEvent m (VtyEvent (V.EvKey V.KEsc [])) = halt m
 -- | function for the devices
 getCurrentConditions :: Measurements -> IO Measurements
 getCurrentConditions m = do
-  newColdIonPressure <- coldIonPressureUpdate m  -- update pressure of ColdIon
+  newColdIonPressure <- coldIonPressureUpdate m     -- update pressure of ColdIon
+  newLakeShoreTemperaturss <- lakeShoreTempUpdate m -- update temperatures of LS
   return $
-    m & coldIon . pressure .~ newColdIonPressure -- write pressure of ColdIon
+    m
+    & coldIon . ciPressure .~ newColdIonPressure             -- write pressure of ColdIon
+    & lakeShore . lsTemperatures .~ newLakeShoreTemperaturss -- write Temperatures of LS
 
--- | Sending, receiving and understanding an request to the ColdIon.
+{- ======= -}
+{- ColdIon -}
+{- ======= -}
+-- | Sending, receiving and in die gasphase 😀 und die meisten gruppen, kenn ich ja schon, hab ich ja reingeschmissenunderstanding an request to the ColdIon.
 -- | The pressure is retured
 coldIonPressureUpdate :: Measurements -> IO (Maybe Double)
 coldIonPressureUpdate m = do
   ci <- openSerial coldIonPort defaultSerialSettings { commSpeed = CS19200 }
-  if isNothing ciRequest
-    then return Nothing
-    else do
-      _ <- send ci $ CI.ciString2ByteString . fromJust $ ciRequest
-      ciAnswer <- recv ci 24
+  _ <- send ci $ CI.ciString2ByteString . fromJust $ coldIonRequest
+  coldIonAnswer <- recv ci 24
 
-      -- This is perfectly safe function returning Nothing if it fails.
-      -- nevertheless; it is an IO function, therefore we have IO type
-      let ciAnswerCIString = parseOnly CI.parseAnswer ciAnswer
+  -- This is perfectly safe function returning Nothing if it fails.
+  -- nevertheless; it is an IO function, therefore we have IO type
+  let coldIonAnswerCIString = AB.parseOnly CI.parseAnswer coldIonAnswer
 
-      if isRight ciAnswerCIString
-        then do
-          let ciPressure =
-                parseOnly CI.parsePressure
-                $ B.pack
-                . CI.dataBytes2List
-                . CI._ci_data
-                $ fromRight ciAnswerCIString
+  if isRight coldIonAnswerCIString
+    then do
+      let coldIonPressure =
+            AB.parseOnly CI.parsePressure
+            $ B.pack
+            . CI.dataBytes2List
+            . CI._ci_data
+            $ fromRight coldIonAnswerCIString
 
-          if (isRight ciPressure)
-            then return $ Just (fromRight ciPressure)
-            else return Nothing
+      if (isRight coldIonPressure)
+        then return $ Just (fromRight coldIonPressure)
         else return Nothing
+    else return Nothing
   where
-    coldIonPort = m ^. coldIon . port
-    ciChannel = m ^. coldIon . channel
-    ciRequest = CI.createCommandCIString (CI.AskPressure ciChannel)
+    coldIonPort = m ^. coldIon . ciPort
+    coldIonChannel = m ^. coldIon . ciChannel
+    coldIonRequest = CI.createCommandCIString (CI.AskPressure coldIonChannel)
 
+-- | Sending, receiving and understanding an request to the ColdIon.
+-- | The Name is retured
 coldIonNameUpdate :: Measurements -> IO (Maybe String)
 coldIonNameUpdate m = do
   ci <- openSerial coldIonPort defaultSerialSettings { commSpeed = CS19200 }
-  if isNothing ciRequest
-    then return Nothing
-    else do
-      _ <- send ci $ CI.ciString2ByteString . fromJust $ ciRequest
-      ciAnswer <- recv ci 24
-      closeSerial ci
+  _ <- send ci $ CI.ciString2ByteString . fromJust $ coldIonRequest
+  coldIonAnswer <- recv ci 24
+  closeSerial ci
 
-      -- This is perfectly safe function returning Nothing if it fails.
-      -- nevertheless; it is an IO function, therefore we have IO type
-      let ciAnswerCIString = parseOnly CI.parseAnswer ciAnswer
+  -- This is perfectly safe function returning Nothing if it fails.
+  -- nevertheless; it is an IO function, therefore we have IO type
+  let coldIonAnswerCIString = AB.parseOnly CI.parseAnswer coldIonAnswer
+  if isRight coldIonAnswerCIString
+    then do
+      let ciDevName =
+            AB.parseOnly CI.parseName
+            $ B.pack
+            . CI.dataBytes2List
+            . CI._ci_data
+            $ fromRight coldIonAnswerCIString
 
-      if isRight ciAnswerCIString
-        then do
-          let ciDevName =
-                parseOnly CI.parseName
-                $ B.pack
-                . CI.dataBytes2List
-                . CI._ci_data
-                $ fromRight ciAnswerCIString
-
-          if (isRight ciDevName)
-            then return $ Just (fromRight ciDevName)
-            else return Nothing
+      if isRight ciDevName
+        then return $ Just (fromRight ciDevName)
         else return Nothing
+    else return Nothing
   where
-    coldIonPort = m ^. coldIon . port
-    ciChannel = m ^. coldIon . channel
-    ciRequest = CI.createCommandCIString (CI.GetDevName)
+    coldIonPort = m ^. coldIon . ciPort
+    coldIonRequest = CI.createCommandCIString CI.GetDevName
 
+{- ========= -}
+{- LakeShore -}
+{- ========= -}
+lakeShoreTempUpdate :: Measurements -> IO (Maybe (Double, Double))
+lakeShoreTempUpdate m = do
+  ls <- openSerial lakeShorePort defaultSerialSettings {commSpeed = CS57600, bitsPerWord = 7, parity = Odd}
+  _ <- send ls $ fromJust lakeShoreRequestA
+  lakeShoreAnswerA <- recv ls 255
+  _ <- send ls $ fromJust lakeShoreRequestB
+  lakeShoreAnswerB <- recv ls 255
+
+  let lakeShoreTempA = AB.parseOnly LS.parseTemperature lakeShoreAnswerA
+      lakeShoreTempB = AB.parseOnly LS.parseTemperature lakeShoreAnswerA
+
+  if (isLeft lakeShoreTempA || isLeft lakeShoreTempB)
+    then return Nothing
+    else return $ Just (fromRight lakeShoreTempA, fromRight lakeShoreTempB)
+  where
+    lakeShorePort = m ^. lakeShore . lsPort
+    lakeShoreRequestA = LS.createCommandLSString (LS.AskTemperature LS.A)
+    lakeShoreRequestB = LS.createCommandLSString (LS.AskTemperature LS.B)
+
+
+{- ########################################################################## -}
+{- Appearance of the widgets, defining Attributes -}
+{- ########################################################################## -}
 theMeasurements :: AttrMap
 theMeasurements = attrMap V.defAttr [("pressureAttr" :: AttrName, V.red `on` V.blue)]
 
+
+{- ########################################################################## -}
+{- Parsers -}
+{- ########################################################################## -}
+-- | parsing the defaults from a file and using defaults, that are not parsed
+-- | from the standard definition
+defaultsParser :: Parser Measurements
+defaultsParser = do
+  defColdIon <- coldIonParser
+  return $
+    initMeasurement
+    & coldIon .~ defColdIon
+
+-- | parse the ColdIon block and update the defaults with the parsed result
+coldIonParser :: Parser ColdIon
+coldIonParser = do
+  _ <- string $ T.pack "[ColdIon]"
+  skipSpace
+  _ <- string $ T.pack "port ="
+  skipSpace
+  portP <- manyTill anyChar endOfLine
+  skipSpace
+  _ <- string $ T.pack "channel ="
+  channelP <- decimal
+  return $
+    initColdIon
+    & ciPort .~ portP
+    & ciChannel .~ channelP
+
+
+{- ########################################################################## -}
+{- Defaults for the Measurement State -}
+{- ########################################################################## -}
+initColdIon :: ColdIon
 initColdIon = ColdIon
-  { _task = CI.GetDevName
-  , _port = "/dev/ttyUSB1"
-  , _channel = 0x01
-  , _pressure = Nothing
-  , _devName = Nothing
+  { _ciTask = CI.GetDevName
+  , _ciPort = "/dev/ttyUSB0"
+  , _ciChannel = 1
+  , _ciPressure = Nothing
+  , _ciDevName = Nothing
   }
 
+initLakeShore :: LakeShore
+initLakeShore = LakeShore
+  { _lsTask = LS.AskTemperature LS.A
+  , _lsPort = "/dev/ttyUSB1"
+  , _lsTemperatures = Nothing
+  , _lsDevName = Nothing
+  }
+
+initMeasurement :: Measurements
 initMeasurement = Measurements
  { _coldIon = initColdIon
+ , _lakeShore = initLakeShore
  }
 
+
+{- ########################################################################## -}
+{- Main Part, performing IO and executing the interface -}
+{- ########################################################################## -}
 main :: IO ()
 main = do
   chan <- newBChan 10
   forkIO $ forever $ do
     writeBChan chan Tick
-    threadDelay 1000000
+    threadDelay 2500000
 
   void $ customMain (V.mkVty V.defaultConfig) (Just chan) app initMeasurement
