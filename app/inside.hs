@@ -16,8 +16,8 @@ import           Lens.Micro
 import           Lens.Micro.TH
 import System.Hardware.Serialport
 import qualified Data.ByteString                  as B
-import           Data.Attoparsec.ByteString.Char8
-import           Data.Attoparsec.ByteString.Lazy
+--import           Data.Attoparsec.ByteString.Char8
+import           Data.Attoparsec.ByteString.Lazy (parseOnly)
 import Data.Either.Unwrap
 import Control.Monad.IO.Class
 
@@ -61,6 +61,7 @@ makeLenses ''Measurements
 {- Define the user interface -}
 {- ########################################################################## -}
 -- | defining the Brick app type
+app :: App Measurements Tick Name
 app = App
   { appDraw         = drawUI                  -- these are the visual elements
                                               -- shown (aka layout), as well as
@@ -103,15 +104,21 @@ deviceWidgetColdIon :: Measurements -> Widget Name
 deviceWidgetColdIon m =
   hLimit 50
   $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str "Device Configuration")
+  $ BB.borderWithLabel (str "ColdIon CU-100")
   $ padAll 2
   $ str
-  $  "ColdIon CU-100\n\n"
+  $  ""
   ++ "  Port:\n"
-  ++ "    " ++ shownPort
+  ++ "    " ++ shownPort ++ "\n\n"
+  ++ "  Channel:\n"
+  ++ "    " ++ shownChannel ++ "\n\n"
+  ++ "  Device Name:\n"
+  ++ "    " ++ show shownDevName
 
   where
-    shownPort = show $ m ^. (coldIon . port)
+    shownPort = m ^. (coldIon . port)
+    shownChannel = show $ m ^. (coldIon . channel)
+    shownDevName = m ^. (coldIon . devName)
 
 
 -- | handling events that occur. These are the ticks, fed into the app as well
@@ -120,24 +127,24 @@ handleEvent :: Measurements -> BrickEvent Name Tick -> EventM Name (Next Measure
 handleEvent m (AppEvent Tick)                = liftIO (getCurrentConditions m) >>= continue
 handleEvent m (VtyEvent (V.EvKey V.KEsc [])) = halt m
 
--- | IO function
+-- | Request an update of all currently connected devices.
+-- | This is basically a wrapper function around all the individual update
+-- | function for the devices
 getCurrentConditions :: Measurements -> IO Measurements
 getCurrentConditions m = do
   newColdIonPressure <- coldIonPressureUpdate m  -- update pressure of ColdIon
-
   return $
     m & coldIon . pressure .~ newColdIonPressure -- write pressure of ColdIon
 
--- | sending, receiving and understanding an request to the ColdIon.
--- | port of the ColdIon comes from the Measurement
--- | this is a dangerous function. which can fail badly
+-- | Sending, receiving and understanding an request to the ColdIon.
+-- | The pressure is retured
 coldIonPressureUpdate :: Measurements -> IO (Maybe Double)
 coldIonPressureUpdate m = do
   ci <- openSerial coldIonPort defaultSerialSettings { commSpeed = CS19200 }
   if isNothing ciRequest
     then return Nothing
     else do
-      send ci $ CI.ciString2ByteString . fromJust $ ciRequest
+      _ <- send ci $ CI.ciString2ByteString . fromJust $ ciRequest
       ciAnswer <- recv ci 24
 
       -- This is perfectly safe function returning Nothing if it fails.
@@ -157,20 +164,49 @@ coldIonPressureUpdate m = do
             then return $ Just (fromRight ciPressure)
             else return Nothing
         else return Nothing
-
   where
     coldIonPort = m ^. coldIon . port
     ciChannel = m ^. coldIon . channel
     ciRequest = CI.createCommandCIString (CI.AskPressure ciChannel)
 
+coldIonNameUpdate :: Measurements -> IO (Maybe String)
+coldIonNameUpdate m = do
+  ci <- openSerial coldIonPort defaultSerialSettings { commSpeed = CS19200 }
+  if isNothing ciRequest
+    then return Nothing
+    else do
+      _ <- send ci $ CI.ciString2ByteString . fromJust $ ciRequest
+      ciAnswer <- recv ci 24
+      closeSerial ci
 
+      -- This is perfectly safe function returning Nothing if it fails.
+      -- nevertheless; it is an IO function, therefore we have IO type
+      let ciAnswerCIString = parseOnly CI.parseAnswer ciAnswer
+
+      if isRight ciAnswerCIString
+        then do
+          let ciDevName =
+                parseOnly CI.parseName
+                $ B.pack
+                . CI.dataBytes2List
+                . CI._ci_data
+                $ fromRight ciAnswerCIString
+
+          if (isRight ciDevName)
+            then return $ Just (fromRight ciDevName)
+            else return Nothing
+        else return Nothing
+  where
+    coldIonPort = m ^. coldIon . port
+    ciChannel = m ^. coldIon . channel
+    ciRequest = CI.createCommandCIString (CI.GetDevName)
 
 theMeasurements :: AttrMap
 theMeasurements = attrMap V.defAttr [("pressureAttr" :: AttrName, V.red `on` V.blue)]
 
 initColdIon = ColdIon
   { _task = CI.GetDevName
-  , _port = "/dev/ttyUSB0"
+  , _port = "/dev/ttyUSB1"
   , _channel = 0x01
   , _pressure = Nothing
   , _devName = Nothing
@@ -186,7 +222,5 @@ main = do
   forkIO $ forever $ do
     writeBChan chan Tick
     threadDelay 1000000
-
-
 
   void $ customMain (V.mkVty V.defaultConfig) (Just chan) app initMeasurement
