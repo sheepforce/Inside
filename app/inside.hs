@@ -101,6 +101,12 @@ data Measurements = Measurements
   } deriving (Show)
 makeLenses ''Measurements
 
+data Warning =
+    OK
+  | OverThresh
+  | Invalid
+  deriving (Show, Eq)
+
 
 {- ########################################################################## -}
 {- Define the user interface -}
@@ -215,16 +221,23 @@ coldIonWarningWidget m =
   $ withAttr attr
   $ BC.hCenter
   $ padTopBottom 1
-  $ if coldIonWarning
-      then str "WARNING"
-      else str "  OK   "
+  $ case coldIonWarning of
+      OK -> str "OK"
+      OverThresh -> str "WARNING"
+      Invalid -> str "COMMUNICATION"
   where
     coldIonWarnThresh = m ^. coldIon . ciWarnThresh
-    coldIonWarning = (fromMaybe 0.0 (m ^. coldIon . ciPressure) >= coldIonWarnThresh)
-    attr =
-      if coldIonWarning
-        then "warnAttr" :: AttrName
-        else "okAttr"   :: AttrName
+    coldIonMonitorVal = m ^. coldIon . ciPressure
+    coldIonWarning
+      | isNothing coldIonMonitorVal = Invalid
+      | fromJust coldIonMonitorVal > coldIonWarnThresh = OverThresh
+      | fromJust coldIonMonitorVal <= coldIonWarnThresh = OK
+      | otherwise = Invalid
+    attr
+      | coldIonWarning == OK = "okAttr" :: AttrName
+      | coldIonWarning == OverThresh = "warningAttr" :: AttrName
+      | coldIonWarning == Invalid = "invalidAttr" :: AttrName
+      | otherwise = "invalidAttr" :: AttrName
 
 {- ========= -}
 {- LakeShore -}
@@ -268,19 +281,31 @@ lakeShoreWarningWidget m =
   $ withAttr attr
   $ BC.hCenter
   $ padTopBottom 1
-  $ if lakeShoreWarning
-    then str "WARNING"
-    else str "OK"
+  $ case lakeShoreWarning of
+      OK -> str "OK"
+      Invalid -> str "COMMUNICATION"
+      OverThresh -> str "WARNING"
   where
     lakeShoreWarnThreshA = m ^. lakeShore . lsWarnThresh . _1
     lakeShoreWarnThreshB = m ^. lakeShore . lsWarnThresh . _2
-    lakeShoreWarning =
-      (  fromMaybe 0.0 (fst $ m ^. lakeShore . lsTemperatures) >= lakeShoreWarnThreshA
-      || fromMaybe 0.0 (snd $ m ^. lakeShore . lsTemperatures) >= lakeShoreWarnThreshB )
-    attr =
-      if lakeShoreWarning
-        then "warnAttr" :: AttrName
-        else "okAttr"   :: AttrName
+    lakeShoreMonitorVals =
+      ( m ^. lakeShore . lsTemperatures . _1
+      , m ^. lakeShore . lsTemperatures . _2
+      )
+    lakeShoreWarning
+      | isNothing (fst lakeShoreMonitorVals) ||
+        isNothing (snd lakeShoreMonitorVals)    = Invalid
+      | fromJust (fst lakeShoreMonitorVals) > lakeShoreWarnThreshA ||
+        fromJust (snd lakeShoreMonitorVals) > lakeShoreWarnThreshB    = OverThresh
+      | fromJust (fst lakeShoreMonitorVals) <= lakeShoreWarnThreshA &&
+        fromJust (snd lakeShoreMonitorVals) <= lakeShoreWarnThreshB    = OK
+      | otherwise = Invalid
+    attr
+      | lakeShoreWarning == OK = "okAttr" :: AttrName
+      | lakeShoreWarning == Invalid = "invalidAttr" :: AttrName
+      | lakeShoreWarning == OverThresh = "warningAttr" :: AttrName
+      | otherwise = "invalidAttr" :: AttrName
+
 
 {- ============== -}
 {- GraphixThree 1 -}
@@ -326,21 +351,31 @@ graphixThree1WarningWidget m =
   $ withAttr attr
   $ BC.hCenter
   $ padTopBottom 1
-  $ if graphixThree1Warning
-      then str "WARNING"
-      else str "OK"
+  $ case graphixThree1Warning of
+      OK -> str "OK"
+      Invalid -> str "COMMUNICATION"
+      OverThresh -> str "WARNING"
   where
     graphixThree1WarnThreshA = m ^. graphixThree1 . gt1WarnThresh . _1
     graphixThree1WarnThreshB = m ^. graphixThree1 . gt1WarnThresh . _2
     graphixThree1WarnThreshC = m ^. graphixThree1 . gt1WarnThresh . _3
-    graphixThree1Warning =
-      (  fromMaybe 0.0 (m ^. graphixThree1 . gt1Pressures . _1) >= graphixThree1WarnThreshA
-      || fromMaybe 0.0 (m ^. graphixThree1 . gt1Pressures . _2) >= graphixThree1WarnThreshB
-      || fromMaybe 0.0 (m ^. graphixThree1 . gt1Pressures . _3) >= graphixThree1WarnThreshC )
-    attr =
-      if graphixThree1Warning
-        then "warnAttr" :: AttrName
-        else "okAttr"   :: AttrName
+    graphixThreeMonitorVal = m ^. graphixThree1 . gt1Pressures
+    graphixThree1Warning
+      | isNothing (graphixThreeMonitorVal ^. _1) ||
+        isNothing (graphixThreeMonitorVal ^. _2) ||
+        isNothing (graphixThreeMonitorVal ^. _3)    = Invalid
+      | fromJust (graphixThreeMonitorVal ^. _1) > graphixThree1WarnThreshA ||
+        fromJust (graphixThreeMonitorVal ^. _2) > graphixThree1WarnThreshB ||
+        fromJust (graphixThreeMonitorVal ^. _3) > graphixThree1WarnThreshC    = OverThresh
+      | fromJust (graphixThreeMonitorVal ^. _1) <= graphixThree1WarnThreshA &&
+        fromJust (graphixThreeMonitorVal ^. _2) <= graphixThree1WarnThreshB &&
+        fromJust (graphixThreeMonitorVal ^. _3) <= graphixThree1WarnThreshC    = OK
+      | otherwise = Invalid
+    attr
+      | graphixThree1Warning == OK = "okAttr"   :: AttrName
+      | graphixThree1Warning == Invalid = "invalidAttr" :: AttrName
+      | graphixThree1Warning == OverThresh = "warningAttr" :: AttrName
+      | otherwise = "invalidAttr" :: AttrName
 
 {- ============== -}
 {- GraphixThree 2 -}
@@ -385,21 +420,31 @@ graphixThree2WarningWidget m =
   $ withAttr attr
   $ BC.hCenter
   $ padTopBottom 1
-  $ if graphixThree2Warning
-      then str "WARNING"
-      else str "OK"
+  $ case graphixThree2Warning of
+      OK -> str "OK"
+      Invalid -> str "COMMUNICATION"
+      OverThresh -> str "WARNING"
   where
     graphixThree2WarnThreshA = m ^. graphixThree2 . gt2WarnThresh . _1
     graphixThree2WarnThreshB = m ^. graphixThree2 . gt2WarnThresh . _2
     graphixThree2WarnThreshC = m ^. graphixThree2 . gt2WarnThresh . _3
-    graphixThree2Warning =
-      (  fromMaybe 0.0 (m ^. graphixThree2 . gt2Pressures . _1) >= graphixThree2WarnThreshA
-      || fromMaybe 0.0 (m ^. graphixThree2 . gt2Pressures . _2) >= graphixThree2WarnThreshB
-      || fromMaybe 0.0 (m ^. graphixThree2 . gt2Pressures . _3) >= graphixThree2WarnThreshC )
-    attr =
-      if graphixThree2Warning
-        then "warnAttr" :: AttrName
-        else "okAttr"   :: AttrName
+    graphixThreeMonitorVal = m ^. graphixThree2 . gt2Pressures
+    graphixThree2Warning
+      | isNothing (graphixThreeMonitorVal ^. _1) ||
+        isNothing (graphixThreeMonitorVal ^. _2) ||
+        isNothing (graphixThreeMonitorVal ^. _3)    = Invalid
+      | fromJust (graphixThreeMonitorVal ^. _1) > graphixThree2WarnThreshA ||
+        fromJust (graphixThreeMonitorVal ^. _2) > graphixThree2WarnThreshB ||
+        fromJust (graphixThreeMonitorVal ^. _3) > graphixThree2WarnThreshC    = OverThresh
+      | fromJust (graphixThreeMonitorVal ^. _1) <= graphixThree2WarnThreshA &&
+        fromJust (graphixThreeMonitorVal ^. _2) <= graphixThree2WarnThreshB &&
+        fromJust (graphixThreeMonitorVal ^. _3) <= graphixThree2WarnThreshC    = OK
+      | otherwise = Invalid
+    attr
+      | graphixThree2Warning == OK = "okAttr"   :: AttrName
+      | graphixThree2Warning == Invalid = "invalidAttr" :: AttrName
+      | graphixThree2Warning == OverThresh = "warningAttr" :: AttrName
+      | otherwise = "invalidAttr" :: AttrName
 
 
 {- ########################################################################## -}
@@ -681,9 +726,10 @@ toggleGraphixThree2 m = m & graphixThree2 . gt2Enabled .~ not currVal
 {- ########################################################################## -}
 theMeasurements :: AttrMap
 theMeasurements = attrMap V.defAttr
-  [ ("normalAttr" :: AttrName, V.white `on` V.black)
-  , ("warnAttr" :: AttrName, V.blue `on` V.red)
-  , ("okAttr"   :: AttrName, V.blue `on` V.green)
+  [ ("normalAttr"  :: AttrName, V.white `on` V.black)
+  , ("warnAttr"    :: AttrName, V.blue `on` V.red)
+  , ("okAttr"      :: AttrName, V.blue `on` V.green)
+  , ("invalidAttr" :: AttrName, V.blue `on` V.yellow)
   ]
 
 
