@@ -105,6 +105,8 @@ drawUI m =
   $ hBox [coldionWidgetPressure m, lakeShoreWidgetTemperature m]
   <=>
   hBox [deviceWidgetColdIon m, deviceWidgetLakeShore m]
+  <=>
+  hBox [coldIonWarningWidget m, lakeShoreWarningWidget m]
   ]
 
 {- ======= -}
@@ -147,6 +149,16 @@ deviceWidgetColdIon m =
     shownChannel = show $ m ^. (coldIon . ciChannel)
     shownDevName = m ^. (coldIon . ciDevName)
 
+coldIonWarningWidget :: Measurements -> Widget Name
+coldIonWarningWidget m =
+  hLimit 20
+  $ withBorderStyle BBS.unicodeBold
+  $ BB.borderWithLabel (str "ColdIon CU-100")
+  $ padAll 1
+  $ if (fromMaybe 0.0 (m ^. coldIon . ciPressure) >= 1.0e-10)
+      then str "WARNING"
+      else str "  OK   "
+
 {- ========= -}
 {- LakeShore -}
 {- ========= -}
@@ -185,6 +197,17 @@ deviceWidgetLakeShore m =
     shownEnabled = show $ m ^. (lakeShore . lsEnabled)
     shownPort = m ^. (lakeShore . lsPort)
     shownDevName = m ^. (lakeShore . lsDevName)
+
+lakeShoreWarningWidget :: Measurements -> Widget Name
+lakeShoreWarningWidget m =
+  hLimit 20
+  $ withBorderStyle BBS.unicodeBold
+  $ BB.borderWithLabel (str "LakeShore 335")
+  $ padAll 1
+  $ if (  fromMaybe 0.0 (fst $ m ^. lakeShore . lsTemperatures) >= 300.0
+       || fromMaybe 0.0 (snd $ m ^. lakeShore . lsTemperatures) >= 300.0 )
+      then str "WARNING"
+      else str "  OK   "
 
 {- ########################################################################## -}
 {- Define EventHandling -}
