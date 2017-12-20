@@ -41,6 +41,7 @@ library
       Internal.BinaryMessages
     , Hardware.Vacom.Coldion
     , Hardware.LakeShore.TemperatureController
+    , Hardware.Leybold.GraphixThree
   ghc-options: -Wall
   default-language: Haskell2010
 
