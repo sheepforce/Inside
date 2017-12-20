@@ -1,5 +1,6 @@
 -- | Module for talking to the LakeShore 335 TemperatureController. A USB
 -- | interface, which emulates a serial RS232  port
+-- | https://www.lakeshore.com/Documents/335_Manual.pdf
 {-# LANGUAGE TemplateHaskell #-}
 
 module Hardware.LakeShore.TemperatureController

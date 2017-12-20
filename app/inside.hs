@@ -226,6 +226,7 @@ coldIonPressureUpdate m = do
   ci <- openSerial coldIonPort defaultSerialSettings { commSpeed = CS19200 }
   _ <- send ci $ CI.ciString2ByteString . fromJust $ coldIonRequest
   coldIonAnswer <- recv ci 24
+  closeSerial ci
 
   -- This is perfectly safe function returning Nothing if it fails.
   -- nevertheless; it is an IO function, therefore we have IO type
