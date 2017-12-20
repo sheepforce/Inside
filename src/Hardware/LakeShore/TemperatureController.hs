@@ -35,8 +35,8 @@ fromAskTemperature _ = Nothing
 -- | create bytestring, that can directly be sent to the LakeShore
 createCommandLSString :: LSCommand -> Maybe B.ByteString
 createCommandLSString a
-  | a == AskTemperature A = Just $ C.pack "KRDG? \"A\"\r\n"
-  | a == AskTemperature B = Just $ C.pack "KRDG? \"B\"\r\n"
+  | a == AskTemperature A = Just $ C.pack "KRDG? a\r\n"
+  | a == AskTemperature B = Just $ C.pack "KRDG? b\r\n"
   | otherwise = Nothing
 
 parseTemperature :: Parser Double
