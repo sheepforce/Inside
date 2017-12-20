@@ -2,28 +2,28 @@
 {-# LANGUAGE TemplateHaskell   #-}
 
 import           Brick
-import           Brick.BChan                     (newBChan, writeBChan)
-import qualified Brick.Widgets.Border            as BB
-import qualified Brick.Widgets.Border.Style      as BBS
-import qualified Brick.Widgets.Center            as BC
-import           Control.Concurrent              (forkIO, threadDelay)
-import           Control.Monad                   (forever, void)
+import           Brick.BChan                              (newBChan, writeBChan)
+import qualified Brick.Widgets.Border                     as BB
+import qualified Brick.Widgets.Border.Style               as BBS
+import qualified Brick.Widgets.Center                     as BC
+import           Control.Applicative
+import           Control.Concurrent                       (forkIO, threadDelay)
+import           Control.Monad                            (forever, void)
 import           Control.Monad.IO.Class
-import qualified Data.Attoparsec.ByteString.Lazy as AB
+import qualified Data.Attoparsec.ByteString.Lazy          as AB
 import           Data.Attoparsec.Text.Lazy
-import qualified Data.ByteString                 as B
+import qualified Data.ByteString                          as B
 import           Data.Either.Unwrap
 import           Data.Maybe
-import qualified Data.Text                       as T
-import qualified Data.Text.IO                    as T
+import qualified Data.Text                                as T
+import qualified Data.Text.IO                             as T
 import           Data.Word
-import qualified Graphics.Vty                    as V
-import qualified Hardware.Vacom.Coldion          as CI
+import qualified Graphics.Vty                             as V
+import qualified Hardware.LakeShore.TemperatureController as LS
+import qualified Hardware.Vacom.Coldion                   as CI
 import           Lens.Micro
 import           Lens.Micro.TH
 import           System.Hardware.Serialport
-import           Control.Applicative
-import qualified Hardware.LakeShore.TemperatureController as LS
 
 
 {- ########################################################################## -}
@@ -42,7 +42,8 @@ type Name = ()
 -- | /dev/ttyUSB0) the device is connected
 type Pressure = Double
 data ColdIon = ColdIon
-  { _ciTask     :: CI.CICommand
+  { _ciEnabled  :: Bool
+  , _ciTask     :: CI.CICommand
   , _ciPort     :: FilePath
   , _ciChannel  :: Word8
   , _ciPressure :: Maybe Pressure
@@ -52,12 +53,13 @@ makeLenses ''ColdIon
 
 -- | Ther LakeShore 335 interface. What it should do and on which port (something
 -- | like /dev/ttyUSB0) the device is connected
-type Temperatures = (Double, Double)
+type Temperatures = (Maybe Double, Maybe Double)
 data LakeShore = LakeShore
-  { _lsTask :: LS.LSCommand
-  , _lsPort :: FilePath
-  , _lsTemperatures :: Maybe Temperatures
-  , _lsDevName :: Maybe String
+  { _lsEnabled      :: Bool
+  , _lsTask         :: LS.LSCommand
+  , _lsPort         :: FilePath
+  , _lsTemperatures :: Temperatures
+  , _lsDevName      :: Maybe String
   } deriving (Show)
 makeLenses ''LakeShore
 
@@ -65,7 +67,7 @@ makeLenses ''LakeShore
 -- | the state of our app is only described by tasks for specific devices, that
 -- | shall be carried out in the current loop
 data Measurements = Measurements
-  { _coldIon :: ColdIon     -- infos about the Coldion CU-100
+  { _coldIon   :: ColdIon     -- infos about the Coldion CU-100
   , _lakeShore :: LakeShore -- infos about the LakeShore 335
   } deriving (Show)
 makeLenses ''Measurements
@@ -100,7 +102,9 @@ app = App
 drawUI :: Measurements -> [Widget Name]
 drawUI m =
   [ BC.center  -- $(coldionWidgetPressure m) <=> (deviceWidgetColdIon m)]
-  $ hBox [coldionWidgetPressure m, lakeShoreWidgetTemperature m] <=> deviceWidgetColdIon m
+  $ hBox [coldionWidgetPressure m, lakeShoreWidgetTemperature m]
+  <=>
+  hBox [deviceWidgetColdIon m, deviceWidgetLakeShore m]
   ]
 
 {- ======= -}
@@ -122,12 +126,14 @@ coldionWidgetPressure m =
 -- | showing the parameters of the devices (ports, ...)
 deviceWidgetColdIon :: Measurements -> Widget Name
 deviceWidgetColdIon m =
-  hLimit 50
+  hLimit 20
   $ withBorderStyle BBS.unicodeBold
   $ BB.borderWithLabel (str "ColdIon CU-100")
-  $ padAll 2
+  $ padAll 1
   $ str
   $  ""
+  ++ "  Enabled:\n"
+  ++ "    " ++ shownEnabled ++ "\n\n"
   ++ "  Port:\n"
   ++ "    " ++ shownPort ++ "\n\n"
   ++ "  Channel:\n"
@@ -136,6 +142,7 @@ deviceWidgetColdIon m =
   ++ "    " ++ show shownDevName
 
   where
+    shownEnabled = show $ m ^. (coldIon . ciEnabled)
     shownPort = m ^. (coldIon . ciPort)
     shownChannel = show $ m ^. (coldIon . ciChannel)
     shownDevName = m ^. (coldIon . ciDevName)
@@ -157,15 +164,27 @@ lakeShoreWidgetTemperature m =
   where
     shownDevName = fromMaybe "LakeShore 335" $ m ^. (lakeShore . lsDevName)
     maybeTemps = m ^. (lakeShore . lsTemperatures)
-    tempA =
-      if isNothing maybeTemps
-        then Nothing
-        else Just $ fst . fromJust $ maybeTemps
-    tempB =
-      if isNothing maybeTemps
-        then Nothing
-        else Just $ snd . fromJust $ maybeTemps
+    tempA = fst maybeTemps
+    tempB = snd maybeTemps
 
+deviceWidgetLakeShore :: Measurements -> Widget Name
+deviceWidgetLakeShore m =
+  hLimit 20
+  $ withBorderStyle BBS.unicodeBold
+  $ BB.borderWithLabel (str "LakeShore 335")
+  $ padAll 1
+  $ str
+  $  ""
+  ++ "  Enabled:\n"
+  ++ "    " ++ shownEnabled ++ "\n\n"
+  ++ "  Port:\n"
+  ++ "    " ++ shownPort ++ "\n\n"
+  ++ "  Device Name:\n"
+  ++ "    " ++ show shownDevName
+  where
+    shownEnabled = show $ m ^. (lakeShore . lsEnabled)
+    shownPort = m ^. (lakeShore . lsPort)
+    shownDevName = m ^. (lakeShore . lsDevName)
 
 {- ########################################################################## -}
 {- Define EventHandling -}
@@ -173,16 +192,25 @@ lakeShoreWidgetTemperature m =
 -- | handling events that occur. These are the ticks, fed into the app as well
 -- | as the keys pressed
 handleEvent :: Measurements -> BrickEvent Name Tick -> EventM Name (Next Measurements)
-handleEvent m (AppEvent Tick)                = liftIO (getCurrentConditions m) >>= continue
-handleEvent m (VtyEvent (V.EvKey V.KEsc [])) = halt m
+handleEvent m (AppEvent Tick)                       = liftIO (getCurrentConditions m) >>= continue
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'c') [])) = continue $ toggleColdIon m
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'l') [])) = continue $ toggleLakeShore m
+handleEvent m (VtyEvent (V.EvKey V.KEsc []))        = halt m
+handleEvent m _                                     = continue m
 
 -- | Request an update of all currently connected devices.
 -- | This is basically a wrapper function around all the individual update
 -- | function for the devices
 getCurrentConditions :: Measurements -> IO Measurements
 getCurrentConditions m = do
-  newColdIonPressure <- coldIonPressureUpdate m     -- update pressure of ColdIon
-  newLakeShoreTemperaturss <- lakeShoreTempUpdate m -- update temperatures of LS
+  newColdIonPressure <-                      -- update ColdIon Pressure
+    if (m ^. coldIon . ciEnabled)            -- if enabled
+      then coldIonPressureUpdate m           -- by asking the device
+      else return Nothing                    -- disbaled -> Nothing
+  newLakeShoreTemperaturss <-                -- update LakeShore temperatures
+    if (m ^. lakeShore . lsEnabled)          -- if enabled
+      then lakeShoreTempUpdate m
+      else return (Nothing, Nothing)
   return $
     m
     & coldIon . ciPressure .~ newColdIonPressure             -- write pressure of ColdIon
@@ -250,17 +278,24 @@ coldIonNameUpdate m = do
     coldIonPort = m ^. coldIon . ciPort
     coldIonRequest = CI.createCommandCIString CI.GetDevName
 
+-- | toggle the Update of the ColdIon (is enabled -> disable and vice versa)
+toggleColdIon :: Measurements -> Measurements
+toggleColdIon m = m & coldIon . ciEnabled .~ not currVal
+  where
+    currVal = m ^. coldIon . ciEnabled
+
 {- ========= -}
 {- LakeShore -}
 {- ========= -}
-lakeShoreTempUpdate :: Measurements -> IO (Maybe (Double, Double))
+lakeShoreTempUpdate :: Measurements -> IO (Maybe Double, Maybe Double)
 lakeShoreTempUpdate m = do
   ls <- openSerial lakeShorePort defaultSerialSettings {commSpeed = CS57600, bitsPerWord = 7, parity = Odd}
   _ <- send ls $ fromJust lakeShoreRequestA
   lakeShoreAnswerA <- recv ls 255
-  closeSerial ls
 
-  ls <- openSerial lakeShorePort defaultSerialSettings {commSpeed = CS57600, bitsPerWord = 7, parity = Odd}
+  -- the LakeShore needs some time before next request can be understood
+  threadDelay 200000
+
   _ <- send ls $ fromJust lakeShoreRequestB
   lakeShoreAnswerB <- recv ls 255
   closeSerial ls
@@ -268,13 +303,24 @@ lakeShoreTempUpdate m = do
   let lakeShoreTempA = AB.parseOnly LS.parseTemperature lakeShoreAnswerA
       lakeShoreTempB = AB.parseOnly LS.parseTemperature lakeShoreAnswerB
 
-  if (isLeft lakeShoreTempA || isLeft lakeShoreTempB)
-    then return Nothing
-    else return $ Just (fromRight lakeShoreTempA, fromRight lakeShoreTempB)
+  if isLeft lakeShoreTempA
+    then
+      if isLeft lakeShoreTempB
+        then return (Nothing, Nothing)
+        else return (Nothing, Just $ fromRight lakeShoreTempB)
+    else
+      if isLeft lakeShoreTempB
+        then return (Just $ fromRight lakeShoreTempA, Nothing)
+        else return (Just $ fromRight lakeShoreTempA, Just $ fromRight lakeShoreTempB)
   where
     lakeShorePort = m ^. lakeShore . lsPort
     lakeShoreRequestA = LS.createCommandLSString (LS.AskTemperature LS.A)
     lakeShoreRequestB = LS.createCommandLSString (LS.AskTemperature LS.B)
+
+toggleLakeShore :: Measurements -> Measurements
+toggleLakeShore m = m & lakeShore . lsEnabled .~ not currVal
+  where
+    currVal = m ^. lakeShore . lsEnabled
 
 
 {- ########################################################################## -}
@@ -301,16 +347,37 @@ coldIonParser :: Parser ColdIon
 coldIonParser = do
   _ <- string $ T.pack "[ColdIon]"
   skipSpace
+  _ <- string $ T.pack "enabled ="
+  skipSpace
+  enabledP <- (string $ T.pack "True") <|> (string $ T.pack "False")
   _ <- string $ T.pack "port ="
   skipSpace
   portP <- manyTill anyChar endOfLine
   skipSpace
   _ <- string $ T.pack "channel ="
   channelP <- decimal
+
   return $
     initColdIon
+    & ciEnabled .~ (enabledP == T.pack "True")
     & ciPort .~ portP
     & ciChannel .~ channelP
+
+lakeShoreParser :: Parser LakeShore
+lakeShoreParser = do
+  _ <- string $ T.pack "[LakeShore355]"
+  skipSpace
+  _ <- string $ T.pack "enabled ="
+  skipSpace
+  enabledP <- (string $ T.pack "True") <|> (string $ T.pack "False")
+  _ <- string $ T.pack "port ="
+  skipSpace
+  portP <- manyTill anyChar endOfLine
+
+  return $
+    initLakeShore
+    & lsEnabled .~ (enabledP == T.pack "True")
+    & lsPort .~ portP
 
 
 {- ########################################################################## -}
@@ -318,7 +385,8 @@ coldIonParser = do
 {- ########################################################################## -}
 initColdIon :: ColdIon
 initColdIon = ColdIon
-  { _ciTask = CI.GetDevName
+  { _ciEnabled = False
+  , _ciTask = CI.GetDevName
   , _ciPort = "/dev/ttyUSB0"
   , _ciChannel = 1
   , _ciPressure = Nothing
@@ -327,9 +395,10 @@ initColdIon = ColdIon
 
 initLakeShore :: LakeShore
 initLakeShore = LakeShore
-  { _lsTask = LS.AskTemperature LS.A
+  { _lsEnabled = False
+  , _lsTask = LS.AskTemperature LS.A
   , _lsPort = "/dev/ttyUSB1"
-  , _lsTemperatures = Nothing
+  , _lsTemperatures = (Nothing, Nothing)
   , _lsDevName = Nothing
   }
 
