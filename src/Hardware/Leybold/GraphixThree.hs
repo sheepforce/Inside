@@ -34,7 +34,7 @@ createCommandGTStringUnChecked :: GTCommand -> C.ByteString
 createCommandGTStringUnChecked a
   | a == AskPressure A = C.pack "\SI1;29 "
   | a == AskPressure B = C.pack "\SI2;29 "
-  | a == AskPressure B = C.pack "\SI3;29 "
+  | a == AskPressure C = C.pack "\SI3;29 "
 
 -- | make a complete message for the GraphixThree, including termination
 -- | character and checksum
