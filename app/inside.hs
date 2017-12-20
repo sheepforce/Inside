@@ -41,13 +41,13 @@ type Name = ()
 
 -- | The ColdIon interface. What it should do and on which port (something like
 -- | /dev/ttyUSB0) the device is connected
-type Pressure = Double
+type CIPressure = Double
 data ColdIon = ColdIon
   { _ciEnabled  :: Bool
   , _ciTask     :: CI.CICommand
   , _ciPort     :: FilePath
   , _ciChannel  :: Word8
-  , _ciPressure :: Maybe Pressure
+  , _ciPressure :: Maybe CIPressure
   , _ciDevName  :: Maybe String
   } deriving (Show)
 makeLenses ''ColdIon
@@ -123,9 +123,39 @@ app = App
                                               -- changed
   }
 
+-- | horizontal limit (therefore size) of the widgets
+hWidgetBoxSize :: Int
+hWidgetBoxSize = 25
+
 -- | the user interface, composed of individual Widgets
 drawUI :: Measurements -> [Widget Name]
 drawUI m =
+  [ BC.center $
+    (
+      withBorderStyle BBS.unicodeBold
+      $ BB.borderWithLabel (str "ColdIon CU-100")
+      $ vBox [coldionWidgetPressure m, hLimit hWidgetBoxSize BB.hBorder, deviceWidgetColdIon m, hLimit hWidgetBoxSize BB.hBorder, coldIonWarningWidget m]
+    )
+  <+>
+    (
+      withBorderStyle BBS.unicodeBold
+      $ BB.borderWithLabel (str "LakeShore 335")
+      $ vBox [lakeShoreWidgetTemperature m, hLimit hWidgetBoxSize BB.hBorder, deviceWidgetLakeShore m, hLimit hWidgetBoxSize BB.hBorder, lakeShoreWarningWidget m]
+    )
+  <+>
+    (
+      withBorderStyle BBS.unicodeBold
+      $ BB.borderWithLabel (str "GraphixThree (1)")
+      $ vBox [graphixThree1WidgetPressure m, hLimit hWidgetBoxSize BB.hBorder, deviceWidgetGraphixThree1 m, hLimit hWidgetBoxSize BB.hBorder, graphixThree1WarningWidget m]
+    )
+  <+>
+    (
+      withBorderStyle BBS.unicodeBold
+      $ BB.borderWithLabel (str "GraphixThree (2)")
+      $ vBox [graphixThree2WidgetPressure m, hLimit hWidgetBoxSize BB.hBorder, deviceWidgetGraphixThree2 m, hLimit hWidgetBoxSize BB.hBorder, graphixThree2WarningWidget m]
+    )
+  ]
+  {-
   [ BC.center
   $ hBox [coldionWidgetPressure m, lakeShoreWidgetTemperature m, graphixThree1WidgetPressure m, graphixThree2WidgetPressure m]
   <=>
@@ -133,6 +163,7 @@ drawUI m =
   <=>
   hBox [coldIonWarningWidget m, lakeShoreWarningWidget m, graphixThree1WarningWidget m, graphixThree2WarningWidget m]
   ]
+  -}
 
 {- ======= -}
 {- ColdIon -}
@@ -140,12 +171,10 @@ drawUI m =
 -- | widget for holding the Coldion pressure
 coldionWidgetPressure :: Measurements -> Widget Name
 coldionWidgetPressure m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str shownDevName)
+  hLimit hWidgetBoxSize
   $ BC.hCenter
-  $ padAll 1
-  $ str $ show shownPressure
+  $ padTopBottom 1
+  $ str $ "\n" ++ show shownPressure ++ "\n\n"
   where
     shownDevName = fromMaybe "ColdIon CU-100" $ m ^. (coldIon . ciDevName)
     shownPressure = fromMaybe 0.0 $ m ^. (coldIon . ciPressure)
@@ -153,10 +182,8 @@ coldionWidgetPressure m =
 -- | showing the parameters of the devices (ports, ...)
 deviceWidgetColdIon :: Measurements -> Widget Name
 deviceWidgetColdIon m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str "ColdIon CU-100")
-  $ padAll 1
+  hLimit hWidgetBoxSize
+  $ padTopBottom 1
   $ str
   $  ""
   ++ "  Enabled:\n"
@@ -176,10 +203,9 @@ deviceWidgetColdIon m =
 
 coldIonWarningWidget :: Measurements -> Widget Name
 coldIonWarningWidget m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str "ColdIon CU-100")
-  $ padAll 1
+  hLimit hWidgetBoxSize
+  $ BC.hCenter
+  $ padTopBottom 1
   $ if (fromMaybe 0.0 (m ^. coldIon . ciPressure) >= 1.0e-10)
       then str "WARNING"
       else str "  OK   "
@@ -189,33 +215,30 @@ coldIonWarningWidget m =
 {- ========= -}
 lakeShoreWidgetTemperature :: Measurements -> Widget Name
 lakeShoreWidgetTemperature m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str shownDevName)
+  hLimit hWidgetBoxSize
   $ BC.hCenter
-  $ padAll 1
+  $ padTopBottom 1
   $ vBox
   [ str $ show $ fromMaybe 0.0 tempA
   , str $ show $ fromMaybe 0.0 tempB
+  , str "\n"
   ]
   where
-    shownDevName = fromMaybe "LakeShore 335" $ m ^. (lakeShore . lsDevName)
     maybeTemps = m ^. (lakeShore . lsTemperatures)
     tempA = fst maybeTemps
     tempB = snd maybeTemps
 
 deviceWidgetLakeShore :: Measurements -> Widget Name
 deviceWidgetLakeShore m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str "LakeShore 335")
-  $ padAll 1
+  hLimit hWidgetBoxSize
+  $ padTopBottom 1
   $ str
   $  ""
   ++ "  Enabled:\n"
   ++ "    " ++ shownEnabled ++ "\n\n"
   ++ "  Port:\n"
   ++ "    " ++ shownPort ++ "\n\n"
+  ++ "\n\n\n"
   ++ "  Device Name:\n"
   ++ "    " ++ show shownDevName
   where
@@ -225,10 +248,9 @@ deviceWidgetLakeShore m =
 
 lakeShoreWarningWidget :: Measurements -> Widget Name
 lakeShoreWarningWidget m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str "LakeShore 335")
-  $ padAll 1
+  hLimit hWidgetBoxSize
+  $ BC.hCenter
+  $ padTopBottom 1
   $ if (  fromMaybe 0.0 (fst $ m ^. lakeShore . lsTemperatures) >= 300.0
        || fromMaybe 0.0 (snd $ m ^. lakeShore . lsTemperatures) >= 300.0 )
       then str "WARNING"
@@ -239,11 +261,9 @@ lakeShoreWarningWidget m =
 {- ============== -}
 graphixThree1WidgetPressure :: Measurements -> Widget Name
 graphixThree1WidgetPressure m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str shownDevName)
+  hLimit hWidgetBoxSize
   $ BC.hCenter
-  $ padAll 1
+  $ padTopBottom 1
   $ vBox
   [ str $ show $ fromMaybe 0.0 pressureA
   , str $ show $ fromMaybe 0.0 pressureB
@@ -258,16 +278,15 @@ graphixThree1WidgetPressure m =
 
 deviceWidgetGraphixThree1 :: Measurements -> Widget Name
 deviceWidgetGraphixThree1 m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str "GraphixThree (1)")
-  $ padAll 1
+  hLimit hWidgetBoxSize
+  $ padTopBottom 1
   $ str
   $  ""
   ++ "  Enabled:\n"
   ++ "    " ++ shownEnabled ++ "\n\n"
   ++ "  Port:\n"
   ++ "    " ++ shownPort ++ "\n\n"
+  ++ "\n\n\n"
   ++ "  Device Name:\n"
   ++ "    " ++ show shownDevName
   where
@@ -277,10 +296,9 @@ deviceWidgetGraphixThree1 m =
 
 graphixThree1WarningWidget :: Measurements -> Widget Name
 graphixThree1WarningWidget m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str "LakeShore 335")
-  $ padAll 1
+  hLimit hWidgetBoxSize
+  $ BC.hCenter
+  $ padTopBottom 1
   $ if (  fromMaybe 0.0 (m ^. graphixThree1 . gt1Pressures . _1) >= 300.0
        || fromMaybe 0.0 (m ^. graphixThree1 . gt1Pressures . _2) >= 300.0
        || fromMaybe 0.0 (m ^. graphixThree1 . gt1Pressures . _3) >= 300.0 )
@@ -292,11 +310,9 @@ graphixThree1WarningWidget m =
 {- ============== -}
 graphixThree2WidgetPressure :: Measurements -> Widget Name
 graphixThree2WidgetPressure m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str shownDevName)
+  hLimit hWidgetBoxSize
   $ BC.hCenter
-  $ padAll 1
+  $ padTopBottom 1
   $ vBox
   [ str $ show $ fromMaybe 0.0 pressureA
   , str $ show $ fromMaybe 0.0 pressureB
@@ -311,16 +327,15 @@ graphixThree2WidgetPressure m =
 
 deviceWidgetGraphixThree2 :: Measurements -> Widget Name
 deviceWidgetGraphixThree2 m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str "GraphixThree (2)")
-  $ padAll 1
+  hLimit hWidgetBoxSize
+  $ padTopBottom 1
   $ str
   $  ""
   ++ "  Enabled:\n"
   ++ "    " ++ shownEnabled ++ "\n\n"
   ++ "  Port:\n"
   ++ "    " ++ shownPort ++ "\n\n"
+  ++ "\n\n\n"
   ++ "  Device Name:\n"
   ++ "    " ++ show shownDevName
   where
@@ -330,10 +345,9 @@ deviceWidgetGraphixThree2 m =
 
 graphixThree2WarningWidget :: Measurements -> Widget Name
 graphixThree2WarningWidget m =
-  hLimit 20
-  $ withBorderStyle BBS.unicodeBold
-  $ BB.borderWithLabel (str "LakeShore 335")
-  $ padAll 1
+  hLimit hWidgetBoxSize
+  $ BC.hCenter
+  $ padTopBottom 1
   $ if (  fromMaybe 0.0 (m ^. graphixThree2 . gt2Pressures . _1) >= 300.0
        || fromMaybe 0.0 (m ^. graphixThree2 . gt2Pressures . _2) >= 300.0
        || fromMaybe 0.0 (m ^. graphixThree2 . gt2Pressures . _3) >= 300.0 )
@@ -388,7 +402,7 @@ getCurrentConditions m = do
 {- ======= -}
 -- | Sending, receiving and understanding an request to the ColdIon.
 -- | The pressure is retured
-coldIonPressureUpdate :: Measurements -> IO (Maybe Double)
+coldIonPressureUpdate :: Measurements -> IO (Maybe CIPressure)
 coldIonPressureUpdate m = do
   ci <- openSerial coldIonPort defaultSerialSettings { commSpeed = CS19200 }
   _ <- send ci $ CI.ciString2ByteString . fromJust $ coldIonRequest
