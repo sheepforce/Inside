@@ -9,7 +9,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C
 import Data.Word
 
--- | the Channel (Gauge) to ask
+-- | the Channel (Gauge) to send a command to
 data Channel =
     A
   | B
@@ -29,12 +29,15 @@ fromAskPressure :: GTCommand -> Maybe Channel
 fromAskPressure (AskPressure a) = Just a
 fromAskPressure _ = Nothing
 
+-- | make the body of a message
 createCommandGTStringUnChecked :: GTCommand -> C.ByteString
 createCommandGTStringUnChecked a
   | a == AskPressure A = C.pack "\SI1;29 "
   | a == AskPressure B = C.pack "\SI2;29 "
   | a == AskPressure B = C.pack "\SI3;29 "
 
+-- | make a complete message for the GraphixThree, including termination
+-- | character and checksum
 createCommandGTString :: GTCommand -> B.ByteString
 createCommandGTString a = B.pack $ messageBody ++ [messageCRC] ++ [messageEOF]
   where
@@ -42,6 +45,7 @@ createCommandGTString a = B.pack $ messageBody ++ [messageCRC] ++ [messageEOF]
     messageCRC = crc messageBody
     messageEOF = 0x04
 
+-- | calculate the checksum for a message
 crc :: [Word8] -> Word8
 crc a =
   if pre < 32
