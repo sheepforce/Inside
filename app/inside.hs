@@ -158,6 +158,19 @@ drawUI m =
       $ BB.borderWithLabel (str "GraphixThree (2)")
       $ vBox [graphixThree2WidgetPressure m, hLimit hWidgetBoxSize BB.hBorder, deviceWidgetGraphixThree2 m, hLimit hWidgetBoxSize BB.hBorder, graphixThree2WarningWidget m]
     )
+  <=>
+    (
+      hLimit (hWidgetBoxSize * 4 + 8)
+      $ withBorderStyle BBS.unicodeBold
+      $ BB.borderWithLabel (str "Key Bindings")
+      $ BC.hCenter
+      $ padTopBottom 2
+      $ str
+        $  "c : toggle ColdIon\n"
+        ++ "l : toggle LakeShore 355\n"
+        ++ "g : toggle GraphixThree (1)\n"
+        ++ "t : toggle GraphixThree (2)\n"
+    )
   ]
 
 {- ======= -}
