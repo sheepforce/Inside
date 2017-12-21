@@ -180,6 +180,15 @@ drawUI m =
     (
       hLimit ((hWidgetBoxSize + 2) * 4)
       $ withBorderStyle BBS.unicodeBold
+      $ BB.borderWithLabel (str "On Screen Infos")
+      $ BC.hCenter
+      $ padTopBottom 2
+      $ vBox [ str i | i <- (m ^. onScreenInfo)]
+    )
+  <=>
+    (
+      hLimit ((hWidgetBoxSize + 2) * 4)
+      $ withBorderStyle BBS.unicodeBold
       $ BB.borderWithLabel (str "Key Bindings")
       $ BC.hCenter
       $ padTopBottom 2
@@ -189,16 +198,6 @@ drawUI m =
         ++ "g : toggle GraphixThree (1)\n"
         ++ "t : toggle GraphixThree (2)\n"
         ++ "o : toggle Logging"
-    )
-  <=>
-    (
-      hLimit ((hWidgetBoxSize + 2) * 4)
-      $ withBorderStyle BBS.unicodeBold
-      $ BB.borderWithLabel (str "On Screen Infos")
-      $ BC.hCenter
-      $ padTopBottom 2
-      $ vBox
-      [ str i | i <- (m ^. onScreenInfo)]
     )
   ]
 
@@ -230,13 +229,16 @@ deviceWidgetColdIon m =
   ++ "  Channel:\n"
   ++ "    " ++ shownChannel ++ "\n\n"
   ++ "  Device Name:\n"
-  ++ "    " ++ show shownDevName
+  ++ "    " ++ show shownDevName ++ "\n\n"
+  ++ "  Warning Threshold:\n"
+  ++ "    " ++ show shownWarningThreshold
 
   where
     shownEnabled = show $ m ^. (coldIon . ciEnabled)
     shownPort = m ^. (coldIon . ciPort)
     shownChannel = show $ m ^. (coldIon . ciChannel)
     shownDevName = m ^. (coldIon . ciDevName)
+    shownWarningThreshold = m ^. (coldIon . ciWarnThresh)
 
 coldIonWarningWidget :: Measurements -> Widget Name
 coldIonWarningWidget m =
@@ -294,11 +296,14 @@ deviceWidgetLakeShore m =
   ++ "    " ++ shownPort ++ "\n\n"
   ++ "\n\n\n"
   ++ "  Device Name:\n"
-  ++ "    " ++ show shownDevName
+  ++ "    " ++ show shownDevName ++ "\n\n"
+  ++ "  Warning Threshold:\n"
+  ++ "    " ++ show shownWarningThreshold
   where
     shownEnabled = show $ m ^. (lakeShore . lsEnabled)
     shownPort = m ^. (lakeShore . lsPort)
     shownDevName = m ^. (lakeShore . lsDevName)
+    shownWarningThreshold = m ^. (lakeShore . lsWarnThresh)
 
 lakeShoreWarningWidget :: Measurements -> Widget Name
 lakeShoreWarningWidget m =
@@ -366,11 +371,14 @@ deviceWidgetGraphixThree1 m =
   ++ "    " ++ shownPort ++ "\n\n"
   ++ "\n\n\n"
   ++ "  Device Name:\n"
-  ++ "    " ++ show shownDevName
+  ++ "    " ++ show shownDevName ++ "\n\n"
+  ++ "  Warning Threshold:\n"
+  ++ "    " ++ show shownWarningThreshold
   where
     shownEnabled = show $ m ^. (graphixThree1 . gt1Enabled)
     shownPort = m ^. (graphixThree1 . gt1Port)
     shownDevName = m ^. (graphixThree1 . gt1DevName)
+    shownWarningThreshold = m ^. (graphixThree1 . gt1WarnThresh)
 
 graphixThree1WarningWidget :: Measurements -> Widget Name
 graphixThree1WarningWidget m =
@@ -438,11 +446,14 @@ deviceWidgetGraphixThree2 m =
   ++ "    " ++ shownPort ++ "\n\n"
   ++ "\n\n\n"
   ++ "  Device Name:\n"
-  ++ "    " ++ show shownDevName
+  ++ "    " ++ show shownDevName ++ "\n\n"
+  ++ "  Warning Threshold:\n"
+  ++ "    " ++ show shownWarningThreshold
   where
     shownEnabled = show $ m ^. (graphixThree2 . gt2Enabled)
     shownPort = m ^. (graphixThree2 . gt2Port)
     shownDevName = m ^. (graphixThree2 . gt2DevName)
+    shownWarningThreshold = m ^. (graphixThree2 . gt2WarnThresh)
 
 graphixThree2WarningWidget :: Measurements -> Widget Name
 graphixThree2WarningWidget m =
@@ -497,7 +508,7 @@ handleEvent m _                                     = continue m
 -- | function for the devices
 getCurrentConditions :: Measurements -> IO Measurements
 getCurrentConditions m = do
-  let mOnScreenInfoReset = m & onScreenInfo .~ ["Cycling ..."]
+  let mOnScreenInfoReset = m & onScreenInfo .~ ["Searching ..."]
   newColdIonMeasurements <-
     if (m ^. coldIon . ciEnabled)
       then catch (updateColdIonPressure mOnScreenInfoReset) (ciHandler mOnScreenInfoReset)
@@ -536,6 +547,8 @@ getCurrentConditions m = do
       [head (newGraphixThree1Measurements ^. onScreenInfo)]
       ++
       [head (newGraphixThree2Measurements ^. onScreenInfo)]
+      ++
+      ["logging : " ++ show (mOnScreenInfoReset ^. writeLog)]
 
   where
     updateColdIonPressure :: Measurements -> IO Measurements
@@ -1088,7 +1101,7 @@ initGraphixThree1 :: GraphixThree1
 initGraphixThree1  = GraphixThree1
   { _gt1Enabled    = False
   , _gt1Task       = GT.AskPressure GT.A
-  , _gt1Port       = "/dev/ttyUSB1"
+  , _gt1Port       = "/dev/ttyUSB2"
   , _gt1Pressures  = (Nothing, Nothing, Nothing)
   , _gt1WarnThresh = (1050.0, 1050.0, 1050.0)
   , _gt1DevName    = Nothing
@@ -1099,7 +1112,7 @@ initGraphixThree2 :: GraphixThree2
 initGraphixThree2  = GraphixThree2
   { _gt2Enabled    = False
   , _gt2Task       = GT.AskPressure GT.A
-  , _gt2Port       = "/dev/ttyUSB2"
+  , _gt2Port       = "/dev/ttyUSB3"
   , _gt2Pressures  = (Nothing, Nothing, Nothing)
   , _gt2WarnThresh = (1050.0, 1050.0, 1050.0)
   , _gt2DevName    = Nothing
