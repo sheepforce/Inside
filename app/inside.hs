@@ -570,8 +570,6 @@ toggleLogging m = m & writeLog .~ not currVal
   where
     currVal = m ^. writeLog
 
-
-
 {- ======= -}
 {- ColdIon -}
 {- ======= -}
@@ -581,7 +579,8 @@ coldIonPressureUpdate :: Measurements -> IO CIPressure
 coldIonPressureUpdate m = do
   ci <- openSerial coldIonPort defaultSerialSettings { commSpeed = CS19200 }
   _ <- send ci $ CI.ciString2ByteString . fromJust $ coldIonRequest
-  coldIonAnswer <- recv ci 24
+  threadDelay 50000
+  coldIonAnswer <- recv ci 255
   closeSerial ci
 
   -- This is perfectly safe function returning Nothing if it fails.
@@ -598,9 +597,17 @@ coldIonPressureUpdate m = do
             $ fromRight coldIonAnswerCIString
 
       if (isRight coldIonPressure)
-        then return $ Just (fromRight coldIonPressure)
-        else return Nothing
-    else return Nothing
+        then do
+          --print coldIonPressure
+          --print $ isRight coldIonPressure
+          return $ Just (fromRight coldIonPressure)
+        else do
+          --print coldIonPressure
+          --print $ isRight coldIonPressure
+          return $ Nothing
+    else do
+      --print coldIonAnswerCIString
+      return Nothing
   where
     coldIonPort = m ^. coldIon . ciPort
     coldIonChannel = m ^. coldIon . ciChannel
@@ -688,6 +695,8 @@ toggleLakeShore m = m & lakeShore . lsEnabled .~ not currVal
 graphixThree1PressureUpdate :: Measurements -> IO (Maybe Double, Maybe Double, Maybe Double)
 graphixThree1PressureUpdate m = do
   gt1 <- openSerial graphixThree1Port defaultSerialSettings { commSpeed = CS38400 }
+
+  threadDelay 5000
 
   -- request pressure from gauge 1
   _ <- send gt1 $ fromJust graphixThreeRequestA
@@ -915,6 +924,7 @@ graphixThree1Parser = do
   enabledP <- (string $ T.pack "True") <|> (string $ T.pack "False")
   skipSpace
   _ <- string $ T.pack "port ="
+  skipSpace
   portP <- manyTill anyChar endOfLine
   skipSpace
   _ <- string $ T.pack "warn ="
@@ -947,6 +957,7 @@ graphixThree2Parser = do
   enabledP <- (string $ T.pack "True") <|> (string $ T.pack "False")
   skipSpace
   _ <- string $ T.pack "port ="
+  skipSpace
   portP <- manyTill anyChar endOfLine
   skipSpace
   _ <- string $ T.pack "warn ="
@@ -1001,7 +1012,7 @@ initGraphixThree1 :: GraphixThree1
 initGraphixThree1  = GraphixThree1
   { _gt1Enabled    = False
   , _gt1Task       = GT.AskPressure GT.A
-  , _gt1Port       = "/dev/ttyUSB2"
+  , _gt1Port       = "/dev/ttyUSB1"
   , _gt1Pressures  = (Nothing, Nothing, Nothing)
   , _gt1WarnThresh = (1050.0, 1050.0, 1050.0)
   , _gt1DevName    = Nothing
@@ -1012,7 +1023,7 @@ initGraphixThree2 :: GraphixThree2
 initGraphixThree2  = GraphixThree2
   { _gt2Enabled    = False
   , _gt2Task       = GT.AskPressure GT.A
-  , _gt2Port       = "/dev/ttyUSB3"
+  , _gt2Port       = "/dev/ttyUSB2"
   , _gt2Pressures  = (Nothing, Nothing, Nothing)
   , _gt2WarnThresh = (1050.0, 1050.0, 1050.0)
   , _gt2DevName    = Nothing
