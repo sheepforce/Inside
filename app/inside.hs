@@ -17,6 +17,7 @@ import           Data.Either.Unwrap
 import           Data.Maybe
 import qualified Data.Text                                as T
 import qualified Data.Text.IO                             as T
+import           Data.Time
 import           Data.Word
 import qualified Graphics.Vty                             as V
 import qualified Hardware.LakeShore.TemperatureController as LS
@@ -24,7 +25,11 @@ import qualified Hardware.Leybold.GraphixThree            as GT
 import qualified Hardware.Vacom.Coldion                   as CI
 import           Lens.Micro
 import           Lens.Micro.TH
+import           System.Environment
 import           System.Hardware.Serialport
+import           Text.Printf
+import System.Directory
+import System.IO
 
 
 {- ########################################################################## -}
@@ -43,13 +48,14 @@ type Name = ()
 -- | /dev/ttyUSB0) the device is connected
 type CIPressure = Maybe Double
 data ColdIon = ColdIon
-  { _ciEnabled  :: Bool
-  , _ciTask     :: CI.CICommand
-  , _ciPort     :: FilePath
-  , _ciChannel  :: Word8
-  , _ciPressure :: CIPressure
+  { _ciEnabled    :: Bool
+  , _ciTask       :: CI.CICommand
+  , _ciPort       :: FilePath
+  , _ciChannel    :: Word8
+  , _ciPressure   :: CIPressure
   , _ciWarnThresh :: Double
-  , _ciDevName  :: Maybe String
+  , _ciDevName    :: Maybe String
+  , _ciLabel      :: String
   } deriving (Show)
 makeLenses ''ColdIon
 
@@ -61,32 +67,35 @@ data LakeShore = LakeShore
   , _lsTask         :: LS.LSCommand
   , _lsPort         :: FilePath
   , _lsTemperatures :: LSTemperatures
-  , _lsWarnThresh :: (Double, Double)
+  , _lsWarnThresh   :: (Double, Double)
   , _lsDevName      :: Maybe String
+  , _lsLabel        :: (String, String)
   } deriving (Show)
 makeLenses ''LakeShore
 
 -- | The firtst of the to GraphixThree1 controllers, 3 gauges
 type GT1Pressures = (Maybe Double, Maybe Double, Maybe Double)
 data GraphixThree1 = GraphixThree1
-  { _gt1Enabled   :: Bool
-  , _gt1Task      :: GT.GTCommand
-  , _gt1Port      :: FilePath
-  , _gt1Pressures :: GT1Pressures
+  { _gt1Enabled    :: Bool
+  , _gt1Task       :: GT.GTCommand
+  , _gt1Port       :: FilePath
+  , _gt1Pressures  :: GT1Pressures
   , _gt1WarnThresh :: (Double, Double, Double)
-  , _gt1DevName   :: Maybe String
+  , _gt1DevName    :: Maybe String
+  , _gt1Label      :: (String, String, String)
   } deriving (Show)
 makeLenses '' GraphixThree1
 
 -- | The second of the to GraphixThree1 controllers, 3 gauges
 type GT2Pressures = (Maybe Double, Maybe Double, Maybe Double)
 data GraphixThree2 = GraphixThree2
-  { _gt2Enabled   :: Bool
-  , _gt2Task      :: GT.GTCommand
-  , _gt2Port      :: FilePath
-  , _gt2Pressures :: GT2Pressures
+  { _gt2Enabled    :: Bool
+  , _gt2Task       :: GT.GTCommand
+  , _gt2Port       :: FilePath
+  , _gt2Pressures  :: GT2Pressures
   , _gt2WarnThresh :: (Double, Double, Double)
-  , _gt2DevName   :: Maybe String
+  , _gt2DevName    :: Maybe String
+  , _gt2Label      :: (String, String, String)
   } deriving (Show)
 makeLenses '' GraphixThree2
 
@@ -98,6 +107,7 @@ data Measurements = Measurements
   , _lakeShore     :: LakeShore     -- infos about the LakeShore 335
   , _graphixThree1 :: GraphixThree1 -- infos about the first GraphixThree
   , _graphixThree2 :: GraphixThree2 -- infos about the second GraphixThree
+  , _writeLog      :: Bool          -- writing everything to a file?
   } deriving (Show)
 makeLenses ''Measurements
 
@@ -135,7 +145,7 @@ app = App
 
 -- | horizontal limit (therefore size) of the widgets
 hWidgetBoxSize :: Int
-hWidgetBoxSize = 25
+hWidgetBoxSize = 30
 
 -- | the user interface, composed of individual Widgets
 drawUI :: Measurements -> [Widget Name]
@@ -166,7 +176,7 @@ drawUI m =
     )
   <=>
     (
-      hLimit (hWidgetBoxSize * 4 + 8)
+      hLimit ((hWidgetBoxSize + 2) * 4)
       $ withBorderStyle BBS.unicodeBold
       $ BB.borderWithLabel (str "Key Bindings")
       $ BC.hCenter
@@ -176,6 +186,7 @@ drawUI m =
         ++ "l : toggle LakeShore 355\n"
         ++ "g : toggle GraphixThree (1)\n"
         ++ "t : toggle GraphixThree (2)\n"
+        ++ "o : toggle Logging"
     )
   ]
 
@@ -188,9 +199,9 @@ coldionWidgetPressure m =
   hLimit hWidgetBoxSize
   $ BC.hCenter
   $ padTopBottom 1
-  $ str $ show shownPressure ++ "\n\n\n"
+  $ str $ printf "%8s : %8.2e mbar\n\n\n" shownLabel shownPressure
   where
-    shownDevName = fromMaybe "ColdIon CU-100" $ m ^. (coldIon . ciDevName)
+    shownLabel = m ^. coldIon . ciLabel
     shownPressure = fromMaybe 0.0 $ m ^. (coldIon . ciPressure)
 
 -- | showing the parameters of the devices (ports, ...)
@@ -222,9 +233,9 @@ coldIonWarningWidget m =
   $ BC.hCenter
   $ padTopBottom 1
   $ case coldIonWarning of
-      OK -> str "OK"
+      OK         -> str "OK"
       OverThresh -> str "WARNING"
-      Invalid -> str "COMMUNICATION"
+      Invalid    -> str "COMMUNICATION"
   where
     coldIonWarnThresh = m ^. coldIon . ciWarnThresh
     coldIonMonitorVal = m ^. coldIon . ciPressure
@@ -248,14 +259,16 @@ lakeShoreWidgetTemperature m =
   $ BC.hCenter
   $ padTopBottom 1
   $ vBox
-  [ str $ show $ fromMaybe 0.0 tempA
-  , str $ show $ fromMaybe 0.0 tempB
+  [ str $ printf "%8s : %8.2f K\n" shownLabel1 (fromMaybe 0.0 tempA)
+  , str $ printf "%8s : %8.2f K\n" shownLabel2 (fromMaybe 0.0 tempB)
   , str "\n"
   ]
   where
-    maybeTemps = m ^. (lakeShore . lsTemperatures)
+    maybeTemps = m ^. lakeShore . lsTemperatures
     tempA = fst maybeTemps
     tempB = snd maybeTemps
+    shownLabel1 = m ^. lakeShore . lsLabel . _1
+    shownLabel2 = m ^. lakeShore . lsLabel . _2
 
 deviceWidgetLakeShore :: Measurements -> Widget Name
 deviceWidgetLakeShore m =
@@ -282,8 +295,8 @@ lakeShoreWarningWidget m =
   $ BC.hCenter
   $ padTopBottom 1
   $ case lakeShoreWarning of
-      OK -> str "OK"
-      Invalid -> str "COMMUNICATION"
+      OK         -> str "OK"
+      Invalid    -> str "COMMUNICATION"
       OverThresh -> str "WARNING"
   where
     lakeShoreWarnThreshA = m ^. lakeShore . lsWarnThresh . _1
@@ -316,9 +329,9 @@ graphixThree1WidgetPressure m =
   $ BC.hCenter
   $ padTopBottom 1
   $ vBox
-  [ str $ show $ fromMaybe 0.0 pressureA
-  , str $ show $ fromMaybe 0.0 pressureB
-  , str $ show $ fromMaybe 0.0 pressureC
+  [ str $ printf "%8s : %8.2e mbar\n" shownLabel1 (fromMaybe 0.0 pressureA)
+  , str $ printf "%8s : %8.2e mbar\n" shownLabel2 (fromMaybe 0.0 pressureB)
+  , str $ printf "%8s : %8.2e mbar\n" shownLabel3 (fromMaybe 0.0 pressureC)
   ]
   where
     shownDevName = fromMaybe "GraphixThree (1)" $ m ^. (graphixThree1 . gt1DevName)
@@ -326,6 +339,9 @@ graphixThree1WidgetPressure m =
     pressureA = maybePressures ^. _1
     pressureB = maybePressures ^. _2
     pressureC = maybePressures ^. _3
+    shownLabel1 = m ^. graphixThree1 . gt1Label . _1
+    shownLabel2 = m ^. graphixThree1 . gt1Label . _2
+    shownLabel3 = m ^. graphixThree1 . gt1Label . _3
 
 deviceWidgetGraphixThree1 :: Measurements -> Widget Name
 deviceWidgetGraphixThree1 m =
@@ -352,8 +368,8 @@ graphixThree1WarningWidget m =
   $ BC.hCenter
   $ padTopBottom 1
   $ case graphixThree1Warning of
-      OK -> str "OK"
-      Invalid -> str "COMMUNICATION"
+      OK         -> str "OK"
+      Invalid    -> str "COMMUNICATION"
       OverThresh -> str "WARNING"
   where
     graphixThree1WarnThreshA = m ^. graphixThree1 . gt1WarnThresh . _1
@@ -386,15 +402,18 @@ graphixThree2WidgetPressure m =
   $ BC.hCenter
   $ padTopBottom 1
   $ vBox
-  [ str $ show $ fromMaybe 0.0 pressureA
-  , str $ show $ fromMaybe 0.0 pressureB
-  , str $ show $ fromMaybe 0.0 pressureC
+  [ str $ printf "%8s : %8.2e mbar\n" shownLabel1 (fromMaybe 0.0 pressureA)
+  , str $ printf "%8s : %8.2e mbar\n" shownLabel2 (fromMaybe 0.0 pressureB)
+  , str $ printf "%8s : %8.2e mbar\n" shownLabel3 (fromMaybe 0.0 pressureC)
   ]
   where
     maybePressures = m ^. (graphixThree2 . gt2Pressures)
     pressureA = maybePressures ^. _1
     pressureB = maybePressures ^. _2
     pressureC = maybePressures ^. _3
+    shownLabel1 = m ^. graphixThree2 . gt2Label . _1
+    shownLabel2 = m ^. graphixThree2 . gt2Label . _2
+    shownLabel3 = m ^. graphixThree2 . gt2Label . _3
 
 deviceWidgetGraphixThree2 :: Measurements -> Widget Name
 deviceWidgetGraphixThree2 m =
@@ -421,8 +440,8 @@ graphixThree2WarningWidget m =
   $ BC.hCenter
   $ padTopBottom 1
   $ case graphixThree2Warning of
-      OK -> str "OK"
-      Invalid -> str "COMMUNICATION"
+      OK         -> str "OK"
+      Invalid    -> str "COMMUNICATION"
       OverThresh -> str "WARNING"
   where
     graphixThree2WarnThreshA = m ^. graphixThree2 . gt2WarnThresh . _1
@@ -458,6 +477,7 @@ handleEvent m (VtyEvent (V.EvKey (V.KChar 'c') [])) = continue $ toggleColdIon m
 handleEvent m (VtyEvent (V.EvKey (V.KChar 'l') [])) = continue $ toggleLakeShore m
 handleEvent m (VtyEvent (V.EvKey (V.KChar 'g') [])) = continue $ toggleGraphixThree1 m
 handleEvent m (VtyEvent (V.EvKey (V.KChar 't') [])) = continue $ toggleGraphixThree2 m
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'o') [])) = continue $ toggleLogging m
 handleEvent m (VtyEvent (V.EvKey V.KEsc []))        = halt m
 handleEvent m _                                     = continue m
 
@@ -470,8 +490,8 @@ getCurrentConditions m = do
     if (m ^. coldIon . ciEnabled)            -- if enabled
       then coldIonPressureUpdate m           -- by asking the device
       else return Nothing                    -- disbaled -> Nothing
-  newLakeShoreTemperaturss <-                -- update LakeShore temperatures
-    if (m ^. lakeShore . lsEnabled)          -- if enabled
+  newLakeShoreTemperaturss <-
+    if (m ^. lakeShore . lsEnabled)
       then lakeShoreTempUpdate m
       else return (Nothing, Nothing)
   newGraphixThree1Pressures <-
@@ -482,12 +502,75 @@ getCurrentConditions m = do
     if (m ^. graphixThree2 . gt2Enabled)
       then graphixThree2PressureUpdate m
       else return (Nothing, Nothing, Nothing)
+  if (m ^. writeLog)
+    then logWriter m
+    else return ()
   return $
     m
     & coldIon . ciPressure .~ newColdIonPressure                -- write pressure of ColdIon
     & lakeShore . lsTemperatures .~ newLakeShoreTemperaturss    -- write Temperatures of LS
     & graphixThree1 . gt1Pressures .~ newGraphixThree1Pressures -- write Pressures of GT1
     & graphixThree2 . gt2Pressures .~ newGraphixThree2Pressures -- write Pressures of GT2
+
+{- ======= -}
+{- Logging -}
+{- ======= -}
+logWriter :: Measurements -> IO ()
+logWriter m = do
+  logAppend <- doesFileExist "./inside.log"
+
+  if logAppend
+    then do
+      logFile <- openFile "./inside.log" AppendMode
+      writeLogLine logFile m
+      hClose logFile
+    else do
+      logFile <- openFile "./inside.log" WriteMode
+      writeHeader logFile m
+      writeLogLine logFile m
+      hClose logFile
+
+  where
+    writeHeader :: Handle -> Measurements -> IO ()
+    writeHeader handle m = do
+      --              time      ci       lsA    lsB      gt1A   gt1B   gt1C     gt2A   gt2B   gt2C
+      hPrintf handle "#%-33s    #%8s    #%8s  #%8s    #%8s  #%8s  #%8s    #%8s  #%8s  #%8s\n"
+        ("Time" :: String) ci lsA lsB gt1A gt1B gt1C gt2A gt2B gt2C
+        where
+          ci = m ^. coldIon . ciLabel
+          lsA = m ^. lakeShore . lsLabel . _1
+          lsB = m ^. lakeShore . lsLabel . _2
+          gt1A = m ^. graphixThree1 . gt1Label . _1
+          gt1B = m ^. graphixThree1 . gt1Label . _2
+          gt1C = m ^. graphixThree1 . gt1Label . _3
+          gt2A = m ^. graphixThree2 . gt2Label . _1
+          gt2B = m ^. graphixThree2 . gt2Label . _2
+          gt2C = m ^. graphixThree2 . gt2Label . _3
+
+    writeLogLine :: Handle -> Measurements -> IO ()
+    writeLogLine handle m = do
+      logTime <- getZonedTime
+
+      hPrintf handle "%33s    %8.2e    %8.2f  %8.2f    %8.2e  %8.2e  %8.2e    %8.2e  %8.2e  %8.2e\n"
+        (show logTime) ci lsA lsB gt1A gt1B gt1C gt2A gt2B gt2C
+
+        where
+          ci = fromMaybe 0.0 $ m ^. (coldIon . ciPressure)
+          lsA = fromMaybe 0.0 $ m ^. lakeShore . lsTemperatures . _1
+          lsB = fromMaybe 0.0 $ m ^. lakeShore . lsTemperatures . _2
+          gt1A = fromMaybe 0.0 $ m ^. graphixThree1 . gt1Pressures . _1
+          gt1B = fromMaybe 0.0 $ m ^. graphixThree1 . gt1Pressures . _2
+          gt1C = fromMaybe 0.0 $ m ^. graphixThree1 . gt1Pressures . _3
+          gt2A = fromMaybe 0.0 $ m ^. graphixThree2 . gt2Pressures . _1
+          gt2B = fromMaybe 0.0 $ m ^. graphixThree2 . gt2Pressures . _2
+          gt2C = fromMaybe 0.0 $ m ^. graphixThree2 . gt2Pressures . _3
+
+toggleLogging :: Measurements -> Measurements
+toggleLogging m = m & writeLog .~ not currVal
+  where
+    currVal = m ^. writeLog
+
+
 
 {- ======= -}
 {- ColdIon -}
@@ -747,12 +830,19 @@ defaultsParser = do
   defGraphixThree1 <- graphixThree1Parser
   skipSpace
   defGraphixThree2 <- graphixThree2Parser
+  skipSpace
+  _ <- string $ T.pack "[Logging]"
+  skipSpace
+  _ <- string $ T.pack "enabled ="
+  skipSpace
+  enabledP <- (string $ T.pack "True") <|> (string $ T.pack "False")
   return $
     initMeasurement
     & coldIon .~ defColdIon
     & lakeShore .~ defLakeShore
     & graphixThree1 .~ defGraphixThree1
     & graphixThree2 .~ defGraphixThree2
+    & writeLog .~ (enabledP == T.pack "True")
 
 -- | parse the ColdIon block and update the defaults with the parsed result
 coldIonParser :: Parser ColdIon
@@ -768,17 +858,23 @@ coldIonParser = do
   portP <- manyTill anyChar endOfLine
   skipSpace
   _ <- string $ T.pack "channel ="
+  skipSpace
   channelP <- decimal
+  skipSpace
   _ <- string $ T.pack "warn ="
   skipSpace
   warnP <- double
-
+  skipSpace
+  _ <- string $ T.pack "label ="
+  skipSpace
+  label1P <- manyTill anyChar endOfLine
   return $
     initColdIon
     & ciEnabled .~ (enabledP == T.pack "True")
     & ciPort .~ portP
     & ciChannel .~ channelP
     & ciWarnThresh .~ warnP
+    & ciLabel .~ label1P
 
 lakeShoreParser :: Parser LakeShore
 lakeShoreParser = do
@@ -797,12 +893,18 @@ lakeShoreParser = do
   warn1P <- double
   skipSpace
   warn2P <- double
+  skipSpace
+  _ <- string $ T.pack "label ="
+  skipSpace
+  label1P <- manyTill anyChar (char ' ')
+  label2P <- manyTill anyChar endOfLine
 
   return $
     initLakeShore
     & lsEnabled .~ (enabledP == T.pack "True")
     & lsPort .~ portP
     & lsWarnThresh .~ (warn1P, warn2P)
+    & lsLabel .~ (label1P, label2P)
 
 graphixThree1Parser :: Parser GraphixThree1
 graphixThree1Parser = do
@@ -822,12 +924,19 @@ graphixThree1Parser = do
   warn2P <- double
   skipSpace
   warn3P <- double
+  skipSpace
+  _ <- string $ T.pack "label ="
+  skipSpace
+  label1P <- manyTill anyChar (char ' ')
+  label2P <- manyTill anyChar (char ' ')
+  label3P <- manyTill anyChar endOfLine
 
   return $
     initGraphixThree1
     & gt1Enabled .~ (enabledP == T.pack "True")
     & gt1Port .~ portP
     & gt1WarnThresh .~ (warn1P, warn2P, warn3P)
+    & gt1Label .~ (label1P, label2P, label3P)
 
 graphixThree2Parser :: Parser GraphixThree2
 graphixThree2Parser = do
@@ -847,12 +956,19 @@ graphixThree2Parser = do
   warn2P <- double
   skipSpace
   warn3P <- double
+  skipSpace
+  _ <- string $ T.pack "label ="
+  skipSpace
+  label1P <- manyTill anyChar (char ' ')
+  label2P <- manyTill anyChar (char ' ')
+  label3P <- manyTill anyChar endOfLine
 
   return $
     initGraphixThree2
     & gt2Enabled .~ (enabledP == T.pack "True")
     & gt2Port .~ portP
     & gt2WarnThresh .~ (warn1P, warn2P, warn3P)
+    & gt2Label .~ (label1P, label2P, label3P)
 
 
 {- ########################################################################## -}
@@ -867,6 +983,7 @@ initColdIon = ColdIon
   , _ciPressure   = Nothing
   , _ciWarnThresh = 1.0e-9
   , _ciDevName    = Nothing
+  , _ciLabel      = "A"
   }
 
 initLakeShore :: LakeShore
@@ -877,6 +994,7 @@ initLakeShore = LakeShore
   , _lsTemperatures = (Nothing, Nothing)
   , _lsWarnThresh   = (300.0, 300.0)
   , _lsDevName      = Nothing
+  , _lsLabel        = ("A", "B")
   }
 
 initGraphixThree1 :: GraphixThree1
@@ -887,6 +1005,7 @@ initGraphixThree1  = GraphixThree1
   , _gt1Pressures  = (Nothing, Nothing, Nothing)
   , _gt1WarnThresh = (1050.0, 1050.0, 1050.0)
   , _gt1DevName    = Nothing
+  , _gt1Label      = ("A", "B", "C")
   }
 
 initGraphixThree2 :: GraphixThree2
@@ -897,14 +1016,16 @@ initGraphixThree2  = GraphixThree2
   , _gt2Pressures  = (Nothing, Nothing, Nothing)
   , _gt2WarnThresh = (1050.0, 1050.0, 1050.0)
   , _gt2DevName    = Nothing
+  , _gt2Label      = ("A", "B", "C")
   }
 
 initMeasurement :: Measurements
 initMeasurement = Measurements
- { _coldIon   = initColdIon
- , _lakeShore = initLakeShore
+ { _coldIon       = initColdIon
+ , _lakeShore     = initLakeShore
  , _graphixThree1 = initGraphixThree1
  , _graphixThree2 = initGraphixThree2
+ , _writeLog      = False
  }
 
 
@@ -913,9 +1034,29 @@ initMeasurement = Measurements
 {- ########################################################################## -}
 main :: IO ()
 main = do
+  -- possibly read the command line for the config file
+  args <- getArgs
+
+  -- if configFile exists and is valid, read it, otherwise use the internal
+  -- defaults
+  startMeasure <-
+        if (length args == 0)
+          then return initMeasurement
+          else do
+            confFile <- T.readFile (head args)
+            let confMeasureParse = parseOnly defaultsParser confFile
+            if (isLeft confMeasureParse)
+              then do
+                putStrLn "configFile is not valid, using defaults instead"
+                return initMeasurement
+              else return $ fromRight confMeasureParse
+
+  -- make a second thread, that constantly feeds ticks into a channel, read by
+  -- Brick, 50 ticks buffering maximal
   chan <- newBChan 50
   _ <- forkIO $ forever $ do
          writeBChan chan Tick
          threadDelay 2500000
 
-  void $ customMain (V.mkVty V.defaultConfig) (Just chan) app initMeasurement
+  -- execute the TUI with the startMeasure
+  void $ customMain (V.mkVty V.defaultConfig) (Just chan) app startMeasure
