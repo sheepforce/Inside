@@ -8,6 +8,7 @@ import qualified Brick.Widgets.Border.Style               as BBS
 import qualified Brick.Widgets.Center                     as BC
 import           Control.Applicative
 import           Control.Concurrent                       (forkIO, threadDelay)
+import           Control.Exception                        (catch)
 import           Control.Monad                            (forever, void)
 import           Control.Monad.IO.Class
 import qualified Data.Attoparsec.ByteString.Lazy          as AB
@@ -25,11 +26,11 @@ import qualified Hardware.Leybold.GraphixThree            as GT
 import qualified Hardware.Vacom.Coldion                   as CI
 import           Lens.Micro
 import           Lens.Micro.TH
+import           System.Directory
 import           System.Environment
 import           System.Hardware.Serialport
+import           System.IO
 import           Text.Printf
-import System.Directory
-import System.IO
 
 
 {- ########################################################################## -}
@@ -108,6 +109,7 @@ data Measurements = Measurements
   , _graphixThree1 :: GraphixThree1 -- infos about the first GraphixThree
   , _graphixThree2 :: GraphixThree2 -- infos about the second GraphixThree
   , _writeLog      :: Bool          -- writing everything to a file?
+  , _onScreenInfo  :: [String]      -- infos that are raised
   } deriving (Show)
 makeLenses ''Measurements
 
@@ -187,6 +189,16 @@ drawUI m =
         ++ "g : toggle GraphixThree (1)\n"
         ++ "t : toggle GraphixThree (2)\n"
         ++ "o : toggle Logging"
+    )
+  <=>
+    (
+      hLimit ((hWidgetBoxSize + 2) * 4)
+      $ withBorderStyle BBS.unicodeBold
+      $ BB.borderWithLabel (str "On Screen Infos")
+      $ BC.hCenter
+      $ padTopBottom 2
+      $ vBox
+      [ str i | i <- (m ^. onScreenInfo)]
     )
   ]
 
@@ -334,7 +346,6 @@ graphixThree1WidgetPressure m =
   , str $ printf "%8s : %8.2e mbar\n" shownLabel3 (fromMaybe 0.0 pressureC)
   ]
   where
-    shownDevName = fromMaybe "GraphixThree (1)" $ m ^. (graphixThree1 . gt1DevName)
     maybePressures = m ^. (graphixThree1 . gt1Pressures)
     pressureA = maybePressures ^. _1
     pressureB = maybePressures ^. _2
@@ -486,31 +497,96 @@ handleEvent m _                                     = continue m
 -- | function for the devices
 getCurrentConditions :: Measurements -> IO Measurements
 getCurrentConditions m = do
-  newColdIonPressure <-                      -- update ColdIon Pressure
-    if (m ^. coldIon . ciEnabled)            -- if enabled
-      then coldIonPressureUpdate m           -- by asking the device
-      else return Nothing                    -- disbaled -> Nothing
-  newLakeShoreTemperaturss <-
+  let mOnScreenInfoReset = m & onScreenInfo .~ ["Cycling ..."]
+  newColdIonMeasurements <-
+    if (m ^. coldIon . ciEnabled)
+      then catch (updateColdIonPressure mOnScreenInfoReset) (ciHandler mOnScreenInfoReset)
+      else return mOnScreenInfoReset
+
+  newLakeShoreMeasurements <-
     if (m ^. lakeShore . lsEnabled)
-      then lakeShoreTempUpdate m
-      else return (Nothing, Nothing)
-  newGraphixThree1Pressures <-
+      then catch (updateLakeShoreTemperatures mOnScreenInfoReset) (lsHandler mOnScreenInfoReset)
+      else return mOnScreenInfoReset
+
+  newGraphixThree1Measurements <-
     if (m ^. graphixThree1 . gt1Enabled)
-      then graphixThree1PressureUpdate m
-      else return (Nothing, Nothing, Nothing)
-  newGraphixThree2Pressures <-
-    if (m ^. graphixThree2 . gt2Enabled)
-      then graphixThree2PressureUpdate m
-      else return (Nothing, Nothing, Nothing)
-  if (m ^. writeLog)
-    then logWriter m
+      then catch (updateGraphixThree1Pressures mOnScreenInfoReset) (gt1Handler mOnScreenInfoReset)
+      else return mOnScreenInfoReset
+
+  newGraphixThree2Measurements <-
+    if (mOnScreenInfoReset ^. graphixThree2 . gt2Enabled)
+      then catch (updateGraphixThree2Pressures mOnScreenInfoReset) (gt2Handler mOnScreenInfoReset)
+      else return mOnScreenInfoReset
+
+  if (mOnScreenInfoReset ^. writeLog)
+    then logWriter mOnScreenInfoReset
     else return ()
+
   return $
     m
-    & coldIon . ciPressure .~ newColdIonPressure                -- write pressure of ColdIon
-    & lakeShore . lsTemperatures .~ newLakeShoreTemperaturss    -- write Temperatures of LS
-    & graphixThree1 . gt1Pressures .~ newGraphixThree1Pressures -- write Pressures of GT1
-    & graphixThree2 . gt2Pressures .~ newGraphixThree2Pressures -- write Pressures of GT2
+    & coldIon .~ (newColdIonMeasurements ^. coldIon)
+    & lakeShore .~ (newLakeShoreMeasurements ^. lakeShore)
+    & graphixThree1 .~ (newGraphixThree1Measurements ^. graphixThree1)
+    & graphixThree2 .~ (newGraphixThree2Measurements ^. graphixThree2)
+    & onScreenInfo .~
+      [head (newColdIonMeasurements ^. onScreenInfo)]
+      ++
+      [head (newLakeShoreMeasurements ^. onScreenInfo)]
+      ++
+      [head (newGraphixThree1Measurements ^. onScreenInfo)]
+      ++
+      [head (newGraphixThree2Measurements ^. onScreenInfo)]
+
+  where
+    updateColdIonPressure :: Measurements -> IO Measurements
+    updateColdIonPressure n = do
+      updatedColdIonPressure <- coldIonPressureUpdate n
+      return $
+        m
+        & coldIon . ciPressure .~ updatedColdIonPressure
+        & onScreenInfo .~ ["ColdIon CU-100 : connection OK"]
+    ciHandler :: Measurements -> IOError -> IO Measurements
+    ciHandler n e =
+      return $
+        n & onScreenInfo .~ ["ColdIon CU-100 : connection FAILED with " ++ show e]
+
+    updateLakeShoreTemperatures :: Measurements -> IO Measurements
+    updateLakeShoreTemperatures n = do
+      updatedLakeShoreTemperatures <- lakeShoreTempUpdate n
+      return $
+        n
+        & lakeShore . lsTemperatures .~ updatedLakeShoreTemperatures
+        & onScreenInfo .~ ["LakeShore 355 : connection OK"]
+    lsHandler :: Measurements -> IOError -> IO Measurements
+    lsHandler n e =
+      return $
+        n & onScreenInfo .~ ["LakeShore 355 : connection FAILED with " ++ show e]
+
+    updateGraphixThree1Pressures :: Measurements -> IO Measurements
+    updateGraphixThree1Pressures n = do
+      updatedGraphixThree1Pressures <- graphixThree1PressureUpdate n
+      return $
+        m
+        & graphixThree1 . gt1Pressures .~ updatedGraphixThree1Pressures
+        & onScreenInfo .~ ["graphixThree (1) : connection OK"]
+    gt1Handler :: Measurements -> IOError -> IO Measurements
+    gt1Handler n e =
+      return $
+        n & onScreenInfo .~ ["graphixThree (1) : connection FAILED with " ++ show e]
+
+    updateGraphixThree2Pressures :: Measurements -> IO Measurements
+    updateGraphixThree2Pressures n = do
+      updatedGraphixThree2Pressures <- graphixThree2PressureUpdate n
+      return $
+        m
+        & graphixThree2 . gt2Pressures .~ updatedGraphixThree2Pressures
+        & onScreenInfo .~ ["graphixThree (2) : connection OK"]
+    gt2Handler :: Measurements -> IOError -> IO Measurements
+    gt2Handler n e =
+      return $
+        n & onScreenInfo .~ ["graphixThree (2) : connection FAILED with " ++ show e]
+
+
 
 {- ======= -}
 {- Logging -}
@@ -532,38 +608,38 @@ logWriter m = do
 
   where
     writeHeader :: Handle -> Measurements -> IO ()
-    writeHeader handle m = do
+    writeHeader handle n = do
       --              time      ci       lsA    lsB      gt1A   gt1B   gt1C     gt2A   gt2B   gt2C
       hPrintf handle "#%-33s    #%8s    #%8s  #%8s    #%8s  #%8s  #%8s    #%8s  #%8s  #%8s\n"
         ("Time" :: String) ci lsA lsB gt1A gt1B gt1C gt2A gt2B gt2C
         where
-          ci = m ^. coldIon . ciLabel
-          lsA = m ^. lakeShore . lsLabel . _1
-          lsB = m ^. lakeShore . lsLabel . _2
-          gt1A = m ^. graphixThree1 . gt1Label . _1
-          gt1B = m ^. graphixThree1 . gt1Label . _2
-          gt1C = m ^. graphixThree1 . gt1Label . _3
-          gt2A = m ^. graphixThree2 . gt2Label . _1
-          gt2B = m ^. graphixThree2 . gt2Label . _2
-          gt2C = m ^. graphixThree2 . gt2Label . _3
+          ci = n ^. coldIon . ciLabel
+          lsA = n ^. lakeShore . lsLabel . _1
+          lsB = n ^. lakeShore . lsLabel . _2
+          gt1A = n ^. graphixThree1 . gt1Label . _1
+          gt1B = n ^. graphixThree1 . gt1Label . _2
+          gt1C = n ^. graphixThree1 . gt1Label . _3
+          gt2A = n ^. graphixThree2 . gt2Label . _1
+          gt2B = n ^. graphixThree2 . gt2Label . _2
+          gt2C = n ^. graphixThree2 . gt2Label . _3
 
     writeLogLine :: Handle -> Measurements -> IO ()
-    writeLogLine handle m = do
+    writeLogLine handle n = do
       logTime <- getZonedTime
 
       hPrintf handle "%33s    %8.2e    %8.2f  %8.2f    %8.2e  %8.2e  %8.2e    %8.2e  %8.2e  %8.2e\n"
         (show logTime) ci lsA lsB gt1A gt1B gt1C gt2A gt2B gt2C
 
         where
-          ci = fromMaybe 0.0 $ m ^. (coldIon . ciPressure)
-          lsA = fromMaybe 0.0 $ m ^. lakeShore . lsTemperatures . _1
-          lsB = fromMaybe 0.0 $ m ^. lakeShore . lsTemperatures . _2
-          gt1A = fromMaybe 0.0 $ m ^. graphixThree1 . gt1Pressures . _1
-          gt1B = fromMaybe 0.0 $ m ^. graphixThree1 . gt1Pressures . _2
-          gt1C = fromMaybe 0.0 $ m ^. graphixThree1 . gt1Pressures . _3
-          gt2A = fromMaybe 0.0 $ m ^. graphixThree2 . gt2Pressures . _1
-          gt2B = fromMaybe 0.0 $ m ^. graphixThree2 . gt2Pressures . _2
-          gt2C = fromMaybe 0.0 $ m ^. graphixThree2 . gt2Pressures . _3
+          ci = fromMaybe 0.0 $ n ^. (coldIon . ciPressure)
+          lsA = fromMaybe 0.0 $ n ^. lakeShore . lsTemperatures . _1
+          lsB = fromMaybe 0.0 $ n ^. lakeShore . lsTemperatures . _2
+          gt1A = fromMaybe 0.0 $ n ^. graphixThree1 . gt1Pressures . _1
+          gt1B = fromMaybe 0.0 $ n ^. graphixThree1 . gt1Pressures . _2
+          gt1C = fromMaybe 0.0 $ n ^. graphixThree1 . gt1Pressures . _3
+          gt2A = fromMaybe 0.0 $ n ^. graphixThree2 . gt2Pressures . _1
+          gt2B = fromMaybe 0.0 $ n ^. graphixThree2 . gt2Pressures . _2
+          gt2C = fromMaybe 0.0 $ n ^. graphixThree2 . gt2Pressures . _3
 
 toggleLogging :: Measurements -> Measurements
 toggleLogging m = m & writeLog .~ not currVal
@@ -1037,6 +1113,7 @@ initMeasurement = Measurements
  , _graphixThree1 = initGraphixThree1
  , _graphixThree2 = initGraphixThree2
  , _writeLog      = False
+ , _onScreenInfo  = ["Initialising Programm ..."]
  }
 
 
