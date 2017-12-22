@@ -138,20 +138,31 @@ plotSelectedLogData d p = Cairo.toFile filetype plotName $ do
       | d == GraphixThree2 GT.B = "p / mbar"
       | d == GraphixThree2 GT.C = "p / mbar"
       | otherwise = "i have no idea what i am plotting here"
-    plotData
-      | d == ColdIon = filter (/= 0.0) . map (^. ciPressure) $ p
-      | d == LakeShore LS.A = filter (/= 0.0) . map (^. lsTemperatures . _1) $ p
-      | d == LakeShore LS.B = filter (/= 0.0) . map (^. lsTemperatures . _2) $ p
-      | d == GraphixThree1 GT.A = filter (/= 0.0) . map (^. gt1Pressures . _1) $ p
-      | d == GraphixThree1 GT.B = filter (/= 0.0) . map (^. gt1Pressures . _2) $ p
-      | d == GraphixThree1 GT.C = filter (/= 0.0) . map (^. gt1Pressures . _3) $ p
-      | d == GraphixThree2 GT.A = filter (/= 0.0) . map (^. gt2Pressures . _1) $ p
-      | d == GraphixThree2 GT.B = filter (/= 0.0) . map (^. gt2Pressures . _2) $ p
-      | d == GraphixThree2 GT.C = filter (/= 0.0) . map (^. gt2Pressures . _3) $ p
+    plotDataXY
+      | d == ColdIon = filter (\a -> (a ^. ciPressure) /= 0.0) p
+      | d == LakeShore LS.A = filter (\a -> (a ^. lsTemperatures . _1) /= 0.0) p
+      | d == LakeShore LS.B = filter (\a -> (a ^. lsTemperatures . _2) /= 0.0) p
+      | d == GraphixThree1 GT.A = filter (\a -> (a ^. gt1Pressures . _1) /= 0.0) p
+      | d == GraphixThree1 GT.B = filter (\a -> (a ^. gt1Pressures . _2) /= 0.0) p
+      | d == GraphixThree1 GT.C = filter (\a -> (a ^. gt1Pressures . _3) /= 0.0) p
+      | d == GraphixThree2 GT.A = filter (\a -> (a ^. gt2Pressures . _1) /= 0.0) p
+      | d == GraphixThree2 GT.B = filter (\a -> (a ^. gt2Pressures . _2) /= 0.0) p
+      | d == GraphixThree2 GT.C = filter (\a -> (a ^. gt2Pressures . _3) /= 0.0) p
+    plotDataY
+      | d == ColdIon = map (^. ciPressure) plotDataXY
+      | d == LakeShore LS.A = map (^. lsTemperatures . _1) plotDataXY
+      | d == LakeShore LS.B = map (^. lsTemperatures . _2) plotDataXY
+      | d == GraphixThree1 GT.A = map (^. gt1Pressures . _1) plotDataXY
+      | d == GraphixThree1 GT.B = map (^. gt1Pressures . _2) plotDataXY
+      | d == GraphixThree1 GT.C = map (^. gt1Pressures . _3) plotDataXY
+      | d == GraphixThree2 GT.A = map (^. gt2Pressures . _1) plotDataXY
+      | d == GraphixThree2 GT.B = map (^. gt2Pressures . _2) plotDataXY
+      | d == GraphixThree2 GT.C = map (^. gt2Pressures . _3) plotDataXY
     timeDaytime =
-      map ((fromRational . timeOfDayToDayFraction . localTimeOfDay) . (^. time)) p :: [Double]
+      map ((fromRational . timeOfDayToDayFraction . localTimeOfDay) . (^. time)) plotDataXY :: [Double]
     timeDate =
-      map (fromIntegral . snd . toJulianYearAndDay . localDay . (^. time)) p :: [Double]
+      map (fromIntegral . snd . toJulianYearAndDay . localDay . (^. time)) plotDataXY :: [Double]
     timeFrac = zipWith (+) timeDaytime timeDate
+    plotDataX = timeFrac
 
-    plottable = zip timeFrac plotData
+    plottable = zip plotDataX plotDataY
