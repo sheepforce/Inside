@@ -508,7 +508,7 @@ handleEvent m _                                     = continue m
 -- | function for the devices
 getCurrentConditions :: Measurements -> IO Measurements
 getCurrentConditions m = do
-  let mOnScreenInfoReset = m & onScreenInfo .~ ["Searching ..."]
+  let mOnScreenInfoReset = m & onScreenInfo .~ ["Waiting ..."]
   newColdIonMeasurements <-
     if (m ^. coldIon . ciEnabled)
       then catch (updateColdIonPressure mOnScreenInfoReset) (ciHandler mOnScreenInfoReset)
@@ -555,13 +555,15 @@ getCurrentConditions m = do
     updateColdIonPressure n = do
       updatedColdIonPressure <- coldIonPressureUpdate n
       return $
-        m
+        n
         & coldIon . ciPressure .~ updatedColdIonPressure
         & onScreenInfo .~ ["ColdIon CU-100 : connection OK"]
     ciHandler :: Measurements -> IOError -> IO Measurements
     ciHandler n e =
       return $
-        n & onScreenInfo .~ ["ColdIon CU-100 : connection FAILED with " ++ show e]
+        n
+        & onScreenInfo .~ ["ColdIon CU-100 : connection FAILED with " ++ show e]
+        & coldIon . ciPressure .~ Nothing
 
     updateLakeShoreTemperatures :: Measurements -> IO Measurements
     updateLakeShoreTemperatures n = do
@@ -573,33 +575,37 @@ getCurrentConditions m = do
     lsHandler :: Measurements -> IOError -> IO Measurements
     lsHandler n e =
       return $
-        n & onScreenInfo .~ ["LakeShore 355 : connection FAILED with " ++ show e]
+        n
+        & onScreenInfo .~ ["LakeShore 355 : connection FAILED with " ++ show e]
+        & lakeShore . lsTemperatures .~ (Nothing, Nothing)
 
     updateGraphixThree1Pressures :: Measurements -> IO Measurements
     updateGraphixThree1Pressures n = do
       updatedGraphixThree1Pressures <- graphixThree1PressureUpdate n
       return $
-        m
+        n
         & graphixThree1 . gt1Pressures .~ updatedGraphixThree1Pressures
         & onScreenInfo .~ ["graphixThree (1) : connection OK"]
     gt1Handler :: Measurements -> IOError -> IO Measurements
     gt1Handler n e =
       return $
-        n & onScreenInfo .~ ["graphixThree (1) : connection FAILED with " ++ show e]
+        n
+        & onScreenInfo .~ ["graphixThree (1) : connection FAILED with " ++ show e]
+        & graphixThree1 . gt1Pressures .~ (Nothing, Nothing, Nothing)
 
     updateGraphixThree2Pressures :: Measurements -> IO Measurements
     updateGraphixThree2Pressures n = do
       updatedGraphixThree2Pressures <- graphixThree2PressureUpdate n
       return $
-        m
+        n
         & graphixThree2 . gt2Pressures .~ updatedGraphixThree2Pressures
         & onScreenInfo .~ ["graphixThree (2) : connection OK"]
     gt2Handler :: Measurements -> IOError -> IO Measurements
     gt2Handler n e =
       return $
-        n & onScreenInfo .~ ["graphixThree (2) : connection FAILED with " ++ show e]
-
-
+        n
+        & onScreenInfo .~ ["graphixThree (2) : connection FAILED with " ++ show e]
+        & graphixThree2 . gt2Pressures .~ (Nothing, Nothing, Nothing)
 
 {- ======= -}
 {- Logging -}
