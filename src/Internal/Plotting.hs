@@ -16,6 +16,14 @@ data PlotData = PlotData
   , _gt1Pressures   :: (Double, Double, Double)
   , _gt2Pressures   :: (Double, Double, Double)
   } deriving (Show)
+  --makeLenses ''PlotData
+
+data Device =
+    ColdIon
+  | LakeShore
+  | GraphixThree1
+  | GraphixThree2
+  deriving (Show, Eq)
 
 parsePlot :: Parser [PlotData]
 parsePlot = do
@@ -85,3 +93,37 @@ parsePlot = do
         , _gt1Pressures = (gt1AP, gt1BP, gt1CP)
         , _gt2Pressures = (gt2AP, gt2BP, gt2CP)
         }
+
+signal :: [Double] -> [(Double,Double)]
+signal xs = [ (x,(sin (x*3.14159/45) + 1) / 2 * (sin (x*3.14159/5))) | x <- xs ]
+
+plotLogData :: Device -> {-[PlotData] ->-} IO ()
+plotLogData d {-p-} = Cairo.toFile filetype plotName $ do
+  -- attributes for title of the plot
+  layout_title .= "INSIDE " ++ show d
+  layout_title_style . font_size .= 20.0
+
+  -- layout of the x axis
+  layout_x_axis . laxis_title .= "time"
+  layout_x_axis . laxis_title_style . font_size .= 17.5
+  layout_x_axis . laxis_style . axis_label_style . font_size .= 15.0
+
+  -- layout of the y axis
+  layout_y_axis . laxis_title .= titleY
+  layout_y_axis . laxis_title_style . font_size .= 17.5
+  layout_y_axis . laxis_style . axis_label_style . font_size .= 15.0
+  layout_y_axis . laxis_generate .= autoScaledLogAxis def
+
+  -- plotte die Daten
+  plot (points "am points" (signal [0,7..400]))
+  where
+    filetype = FileOptions
+      { _fo_size = (600, 400)
+      , _fo_format = Cairo.SVG
+      }
+    plotName = "INSIDE.svg" :: FilePath
+    titleY
+      | d == ColdIon = "p / mbar"
+      | d == LakeShore = "T / K"
+      | d == GraphixThree1 || d == GraphixThree2 = "p / mbar"
+      | otherwise = "i have no idea what i am plotting here"
