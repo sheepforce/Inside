@@ -33,14 +33,13 @@ library
     , bytestring >= 0.10.8.0
     , bytestring-conversion >= 0.2
     , lens >= 4.15.0
-    , microlens >= 0.4.8.1
-    , microlens-th >= 0.4.1.1
     , attoparsec >= 0.13.1.0
     , either-unwrap >= 1.1
     , Chart >= 1.8.0
     , Chart-cairo >= 1.8.0
     , text >= 1.2.2.0
     , time >= 1.6.0.0
+    , either-unwrap >= 1.1
   exposed-modules:
       Internal.BinaryMessages
     , Internal.Plotting

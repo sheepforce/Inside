@@ -1,13 +1,19 @@
+{-# LANGUAGE TemplateHaskell   #-}
+
 module Internal.Plotting
 ( parsePlot
--- , plotLogData
+, plotSelectedLogData
 ) where
 import           Control.Lens
 import           Data.Attoparsec.Text.Lazy
 import qualified Data.Text                              as T
 import           Data.Time
+import Data.Time.Calendar.Julian
 import           Graphics.Rendering.Chart.Backend.Cairo as Cairo
 import           Graphics.Rendering.Chart.Easy
+import qualified Hardware.LakeShore.TemperatureController as LS
+import qualified Hardware.Leybold.GraphixThree as GT
+import qualified Hardware.Vacom.Coldion as CI
 
 data PlotData = PlotData
   { _time           :: LocalTime
@@ -16,14 +22,15 @@ data PlotData = PlotData
   , _gt1Pressures   :: (Double, Double, Double)
   , _gt2Pressures   :: (Double, Double, Double)
   } deriving (Show)
-  --makeLenses ''PlotData
+makeLenses ''PlotData
 
-data Device =
+data PlotDevice =
     ColdIon
-  | LakeShore
-  | GraphixThree1
-  | GraphixThree2
+  | LakeShore LS.Channel
+  | GraphixThree1 GT.Channel
+  | GraphixThree2 GT.Channel
   deriving (Show, Eq)
+
 
 parsePlot :: Parser [PlotData]
 parsePlot = do
@@ -65,7 +72,7 @@ parsePlot = do
 
     dataLineParser :: Parser PlotData
     dataLineParser = do
-      time <- timeParser
+      timeP <- timeParser
       skipSpace
       ciP <- double
       skipSpace
@@ -87,18 +94,15 @@ parsePlot = do
       endOfLine
 
       return PlotData
-        { _time = time
+        { _time = timeP
         , _ciPressure = ciP
         , _lsTemperatures = (lsAP, lsBP)
         , _gt1Pressures = (gt1AP, gt1BP, gt1CP)
         , _gt2Pressures = (gt2AP, gt2BP, gt2CP)
         }
 
-signal :: [Double] -> [(Double,Double)]
-signal xs = [ (x,(sin (x*3.14159/45) + 1) / 2 * (sin (x*3.14159/5))) | x <- xs ]
-
-plotLogData :: Device -> {-[PlotData] ->-} IO ()
-plotLogData d {-p-} = Cairo.toFile filetype plotName $ do
+plotSelectedLogData :: PlotDevice -> [PlotData] -> IO ()
+plotSelectedLogData d p = Cairo.toFile filetype plotName $ do
   -- attributes for title of the plot
   layout_title .= "INSIDE " ++ show d
   layout_title_style . font_size .= 20.0
@@ -112,10 +116,11 @@ plotLogData d {-p-} = Cairo.toFile filetype plotName $ do
   layout_y_axis . laxis_title .= titleY
   layout_y_axis . laxis_title_style . font_size .= 17.5
   layout_y_axis . laxis_style . axis_label_style . font_size .= 15.0
-  layout_y_axis . laxis_generate .= autoScaledLogAxis def
+  layout_y_axis . laxis_generate .= autoScaledAxis def
 
-  -- plotte die Daten
-  plot (points "am points" (signal [0,7..400]))
+  -- plot data
+  plot (line "am points" [plottable])
+
   where
     filetype = FileOptions
       { _fo_size = (600, 400)
@@ -124,6 +129,29 @@ plotLogData d {-p-} = Cairo.toFile filetype plotName $ do
     plotName = "INSIDE.svg" :: FilePath
     titleY
       | d == ColdIon = "p / mbar"
-      | d == LakeShore = "T / K"
-      | d == GraphixThree1 || d == GraphixThree2 = "p / mbar"
+      | d == LakeShore LS.A = "T / K"
+      | d == LakeShore LS.B = "T / K"
+      | d == GraphixThree1 GT.A = "p / mbar"
+      | d == GraphixThree1 GT.B = "p / mbar"
+      | d == GraphixThree1 GT.C = "p / mbar"
+      | d == GraphixThree2 GT.A = "p / mbar"
+      | d == GraphixThree2 GT.B = "p / mbar"
+      | d == GraphixThree2 GT.C = "p / mbar"
       | otherwise = "i have no idea what i am plotting here"
+    plotData
+      | d == ColdIon = filter (/= 0.0) . map (^. ciPressure) $ p
+      | d == LakeShore LS.A = filter (/= 0.0) . map (^. lsTemperatures . _1) $ p
+      | d == LakeShore LS.B = filter (/= 0.0) . map (^. lsTemperatures . _2) $ p
+      | d == GraphixThree1 GT.A = filter (/= 0.0) . map (^. gt1Pressures . _1) $ p
+      | d == GraphixThree1 GT.B = filter (/= 0.0) . map (^. gt1Pressures . _2) $ p
+      | d == GraphixThree1 GT.C = filter (/= 0.0) . map (^. gt1Pressures . _3) $ p
+      | d == GraphixThree2 GT.A = filter (/= 0.0) . map (^. gt2Pressures . _1) $ p
+      | d == GraphixThree2 GT.B = filter (/= 0.0) . map (^. gt2Pressures . _2) $ p
+      | d == GraphixThree2 GT.C = filter (/= 0.0) . map (^. gt2Pressures . _3) $ p
+    timeDaytime =
+      map ((fromRational . timeOfDayToDayFraction . localTimeOfDay) . (^. time)) p :: [Double]
+    timeDate =
+      map (fromIntegral . snd . toJulianYearAndDay . localDay . (^. time)) p :: [Double]
+    timeFrac = zipWith (+) timeDaytime timeDate
+
+    plottable = zip timeFrac plotData
