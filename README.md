@@ -1,5 +1,5 @@
 # INSIDE
-A tool to monitor the conditions the "INSIDE" UHC chamber.
+A tool to monitor the conditions the "INSIDE" UHV chamber.
 
 ## Capabilities
 INSIDE monitors three different controllers:

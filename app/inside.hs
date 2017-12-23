@@ -12,7 +12,7 @@ import           Control.Exception                        (catch)
 import           Control.Monad                            (forever, void)
 import           Control.Monad.IO.Class
 import qualified Data.Attoparsec.ByteString.Lazy          as AB
-import           Data.Attoparsec.Text.Lazy hiding (take)
+import           Data.Attoparsec.Text.Lazy                hiding (take)
 import qualified Data.ByteString                          as B
 import           Data.Either.Unwrap
 import           Data.Maybe
@@ -32,7 +32,7 @@ import           System.Environment
 import           System.Hardware.Serialport
 import           System.IO
 import           Text.Printf
-import Text.Read
+import           Text.Read
 
 
 {- ########################################################################## -}
@@ -253,6 +253,7 @@ deviceWidgetColdIon m =
     shownDevName = m ^. (coldIon . ciDevName)
     shownWarningThreshold = m ^. (coldIon . ciWarnThresh)
 
+-- | warnings for the ColdIon, coloured
 coldIonWarningWidget :: Measurements -> Widget Name
 coldIonWarningWidget m =
   hLimit hWidgetBoxSize
@@ -280,6 +281,7 @@ coldIonWarningWidget m =
 {- ========= -}
 {- LakeShore -}
 {- ========= -}
+-- | showing current temperatures for the LakeShore
 lakeShoreWidgetTemperature :: Measurements -> Widget Name
 lakeShoreWidgetTemperature m =
   hLimit hWidgetBoxSize
@@ -297,6 +299,7 @@ lakeShoreWidgetTemperature m =
     shownLabel1 = m ^. lakeShore . lsLabel . _1
     shownLabel2 = m ^. lakeShore . lsLabel . _2
 
+-- | device parameters of the LakeShore (port, Threshold)
 deviceWidgetLakeShore :: Measurements -> Widget Name
 deviceWidgetLakeShore m =
   hLimit hWidgetBoxSize
@@ -318,6 +321,7 @@ deviceWidgetLakeShore m =
     shownDevName = m ^. (lakeShore . lsDevName)
     shownWarningThreshold = m ^. (lakeShore . lsWarnThresh)
 
+-- | visual hint for warnings, coloured
 lakeShoreWarningWidget :: Measurements -> Widget Name
 lakeShoreWarningWidget m =
   hLimit hWidgetBoxSize
@@ -353,6 +357,7 @@ lakeShoreWarningWidget m =
 {- ============== -}
 {- GraphixThree 1 -}
 {- ============== -}
+-- | showing three pressures for the Graphix Three Controller
 graphixThree1WidgetPressure :: Measurements -> Widget Name
 graphixThree1WidgetPressure m =
   hLimit hWidgetBoxSize
@@ -372,6 +377,7 @@ graphixThree1WidgetPressure m =
     shownLabel2 = m ^. graphixThree1 . gt1Label . _2
     shownLabel3 = m ^. graphixThree1 . gt1Label . _3
 
+-- | device parameters of the GraphixThree
 deviceWidgetGraphixThree1 :: Measurements -> Widget Name
 deviceWidgetGraphixThree1 m =
   hLimit hWidgetBoxSize
@@ -393,6 +399,7 @@ deviceWidgetGraphixThree1 m =
     shownDevName = m ^. (graphixThree1 . gt1DevName)
     shownWarningThreshold = m ^. (graphixThree1 . gt1WarnThresh)
 
+-- | visual warnings for the graphixThree
 graphixThree1WarningWidget :: Measurements -> Widget Name
 graphixThree1WarningWidget m =
   hLimit hWidgetBoxSize
@@ -565,12 +572,6 @@ handleEvent m (VtyEvent (V.EvKey V.KEsc [])) =
 
 handleEvent m _ =
    continue m
-
-plotterHandler :: Measurements -> IOError -> IO Measurements
-plotterHandler m e = return $
-    m & onScreenInfo .~ oldOnScreenInfo ++ ["Plotting : FAILED with " ++ show e]
- where
-   oldOnScreenInfo = m ^. onScreenInfo
 
 -- | Request an update of all currently connected devices.
 -- | This is basically a wrapper function around all the individual update
@@ -798,11 +799,20 @@ plotter device m = do
       | otherwise = "IHaveNoIdeaWhatIAmDoingHere.svg"
     oldOnScreenInfo = m ^. onScreenInfo
 
+    -- | handling plotting that is going wrong
+plotterHandler :: Measurements -> IOError -> IO Measurements
+plotterHandler m e = return $
+  m & onScreenInfo .~ oldOnScreenInfo ++ ["Plotting : FAILED with " ++ show e]
+  where
+    oldOnScreenInfo = m ^. onScreenInfo
+
+-- | increment the plot interval by 1 minute
 incrPlotInterval :: Measurements -> Measurements
 incrPlotInterval m = m & plotInterval .~ (oldInterval + 1)
   where
     oldInterval = m ^. plotInterval
 
+-- | decrement the plot interval by 1 minute
 decrPlotInterval :: Measurements -> Measurements
 decrPlotInterval m
   | oldInterval <= 1 = m
@@ -836,18 +846,10 @@ coldIonPressureUpdate m = do
             . CI._ci_data
             $ fromRight coldIonAnswerCIString
 
-      if (isRight coldIonPressure)
-        then do
-          --print coldIonPressure
-          --print $ isRight coldIonPressure
-          return $ Just (fromRight coldIonPressure)
-        else do
-          --print coldIonPressure
-          --print $ isRight coldIonPressure
-          return $ Nothing
-    else do
-      --print coldIonAnswerCIString
-      return Nothing
+      if isRight coldIonPressure
+        then return $ Just (fromRight coldIonPressure)
+        else return Nothing
+    else return Nothing
   where
     coldIonPort = m ^. coldIon . ciPort
     coldIonChannel = m ^. coldIon . ciChannel
@@ -891,6 +893,7 @@ toggleColdIon m = m & coldIon . ciEnabled .~ not currVal
 {- ========= -}
 {- LakeShore -}
 {- ========= -}
+-- | request current conditions from the LakeShore
 lakeShoreTempUpdate :: Measurements -> IO (Maybe Double, Maybe Double)
 lakeShoreTempUpdate m = do
   ls <- openSerial lakeShorePort defaultSerialSettings {commSpeed = CS57600, bitsPerWord = 7, parity = Odd}
@@ -921,6 +924,7 @@ lakeShoreTempUpdate m = do
     lakeShoreRequestA = LS.createCommandLSString (LS.AskTemperature LS.A)
     lakeShoreRequestB = LS.createCommandLSString (LS.AskTemperature LS.B)
 
+-- | toggle the lakeShore
 toggleLakeShore :: Measurements -> Measurements
 toggleLakeShore m = m & lakeShore . lsEnabled .~ not currVal
   where
@@ -995,7 +999,7 @@ toggleGraphixThree1 m = m & graphixThree1 . gt1Enabled .~ not currVal
 {- ============== -}
 {- GraphixThree 2 -}
 {- ============== -}
--- | update all three readings from the GraphixThree (Number 1)
+-- | update all three readings from the GraphixThree (Number 2)
 -- | if a gauge is not connected or transmitting data fails,
 -- | a Nothing is returned
 graphixThree2PressureUpdate :: Measurements -> IO (Maybe Double, Maybe Double, Maybe Double)
@@ -1125,6 +1129,7 @@ coldIonParser = do
     & ciWarnThresh .~ warnP
     & ciLabel .~ label1P
 
+-- | parsing the LakeShore part of the config file
 lakeShoreParser :: Parser LakeShore
 lakeShoreParser = do
   _ <- string $ T.pack "[LakeShore355]"
@@ -1155,6 +1160,7 @@ lakeShoreParser = do
     & lsWarnThresh .~ (warn1P, warn2P)
     & lsLabel .~ (label1P, label2P)
 
+-- | parsing the GraphixThree part of the config file
 graphixThree1Parser :: Parser GraphixThree1
 graphixThree1Parser = do
   _ <- string $ T.pack "[GraphixThree1]"
@@ -1188,6 +1194,7 @@ graphixThree1Parser = do
     & gt1WarnThresh .~ (warn1P, warn2P, warn3P)
     & gt1Label .~ (label1P, label2P, label3P)
 
+-- | parsing the GraphixThree part of the config file
 graphixThree2Parser :: Parser GraphixThree2
 graphixThree2Parser = do
   _ <- string $ T.pack "[GraphixThree2]"
