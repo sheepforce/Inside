@@ -7,3 +7,7 @@ First fully working version of `INSIDE`
 - log functionality
 - stable against lost devices
 - terminal user interface
+
+## 1.1.0.0
+- adding plot function
+- log rotation
