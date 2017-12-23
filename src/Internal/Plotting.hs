@@ -1,19 +1,21 @@
-{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Internal.Plotting
-( parsePlot
+( PlotDevice(..)
+, PlotData(..)
+, parsePlot
 , plotSelectedLogData
 ) where
 import           Control.Lens
 import           Data.Attoparsec.Text.Lazy
-import qualified Data.Text                              as T
+import qualified Data.Text                                as T
 import           Data.Time
-import Data.Time.Calendar.Julian
-import           Graphics.Rendering.Chart.Backend.Cairo as Cairo
+import           Data.Time.Calendar.Julian
+import           Graphics.Rendering.Chart.Backend.Cairo   as Cairo
 import           Graphics.Rendering.Chart.Easy
 import qualified Hardware.LakeShore.TemperatureController as LS
-import qualified Hardware.Leybold.GraphixThree as GT
-import qualified Hardware.Vacom.Coldion as CI
+import qualified Hardware.Leybold.GraphixThree            as GT
+import qualified Hardware.Vacom.Coldion                   as CI
 
 data PlotData = PlotData
   { _time           :: LocalTime
@@ -34,7 +36,7 @@ data PlotDevice =
 
 parsePlot :: Parser [PlotData]
 parsePlot = do
-  _ <- string $ T.pack "#Time                                 #     UHV    #       A  #       B    #GT1Label1  #GT1Label2  #GT1Label3    #GT2Label1  #GT2Label2  #GT2Label3"
+  _ <- manyTill anyChar endOfLine
   skipSpace
   plotData <- many1 dataLineParser
 
@@ -101,8 +103,8 @@ parsePlot = do
         , _gt2Pressures = (gt2AP, gt2BP, gt2CP)
         }
 
-plotSelectedLogData :: PlotDevice -> [PlotData] -> IO ()
-plotSelectedLogData d p = Cairo.toFile filetype plotName $ do
+plotSelectedLogData :: PlotDevice -> [PlotData] -> FilePath -> IO ()
+plotSelectedLogData d p f = Cairo.toFile filetype f $ do
   -- attributes for title of the plot
   layout_title .= "INSIDE " ++ show d
   layout_title_style . font_size .= 20.0
@@ -126,7 +128,6 @@ plotSelectedLogData d p = Cairo.toFile filetype plotName $ do
       { _fo_size = (600, 400)
       , _fo_format = Cairo.SVG
       }
-    plotName = "INSIDE.svg" :: FilePath
     titleY
       | d == ColdIon = "p / mbar"
       | d == LakeShore LS.A = "T / K"

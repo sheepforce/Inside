@@ -12,7 +12,7 @@ import           Control.Exception                        (catch)
 import           Control.Monad                            (forever, void)
 import           Control.Monad.IO.Class
 import qualified Data.Attoparsec.ByteString.Lazy          as AB
-import           Data.Attoparsec.Text.Lazy
+import           Data.Attoparsec.Text.Lazy hiding (take)
 import qualified Data.ByteString                          as B
 import           Data.Either.Unwrap
 import           Data.Maybe
@@ -24,6 +24,7 @@ import qualified Graphics.Vty                             as V
 import qualified Hardware.LakeShore.TemperatureController as LS
 import qualified Hardware.Leybold.GraphixThree            as GT
 import qualified Hardware.Vacom.Coldion                   as CI
+import qualified Internal.Plotting                        as P
 import           Lens.Micro
 import           Lens.Micro.TH
 import           System.Directory
@@ -31,6 +32,7 @@ import           System.Environment
 import           System.Hardware.Serialport
 import           System.IO
 import           Text.Printf
+import Text.Read
 
 
 {- ########################################################################## -}
@@ -110,6 +112,7 @@ data Measurements = Measurements
   , _graphixThree2 :: GraphixThree2 -- infos about the second GraphixThree
   , _writeLog      :: Bool          -- writing everything to a file?
   , _onScreenInfo  :: [String]      -- infos that are raised
+  , _plotInterval  :: Int           -- history in Minutes to plot
   } deriving (Show)
 makeLenses ''Measurements
 
@@ -149,6 +152,10 @@ app = App
 hWidgetBoxSize :: Int
 hWidgetBoxSize = 30
 
+-- | delay in seconds before new tick is fed into the TUI
+tickDistance :: Int
+tickDistance = 2500000
+
 -- | the user interface, composed of individual Widgets
 drawUI :: Measurements -> [Widget Name]
 drawUI m =
@@ -181,9 +188,10 @@ drawUI m =
       hLimit ((hWidgetBoxSize + 2) * 4)
       $ withBorderStyle BBS.unicodeBold
       $ BB.borderWithLabel (str "On Screen Infos")
-      $ BC.hCenter
+      $ padRight Max
+      $ padLeftRight 2
       $ padTopBottom 2
-      $ vBox [ str i | i <- (m ^. onScreenInfo)]
+      $ vBox [ str i | i <- m ^. onScreenInfo]
     )
   <=>
     (
@@ -193,11 +201,16 @@ drawUI m =
       $ BC.hCenter
       $ padTopBottom 2
       $ str
-        $  "c : toggle ColdIon\n"
-        ++ "l : toggle LakeShore 355\n"
-        ++ "g : toggle GraphixThree (1)\n"
-        ++ "t : toggle GraphixThree (2)\n"
-        ++ "o : toggle Logging"
+        $  "c                    : toggle ColdIon\n"
+        ++ "l                    : toggle LakeShore 355\n"
+        ++ "g                    : toggle GraphixThree (1)\n"
+        ++ "t                    : toggle GraphixThree (2)\n"
+        ++ "o                    : toggle Logging\n"
+        ++ "+                    : increase plot interval\n"
+        ++ "-                    : decrease plot interval\n"
+        ++ "Ctrl (c / l / g / t) : plot data for device\n"
+        ++ "Space                : enter plot interval manually"
+
     )
   ]
 
@@ -494,14 +507,70 @@ graphixThree2WarningWidget m =
 -- | handling events that occur. These are the ticks, fed into the app as well
 -- | as the keys pressed
 handleEvent :: Measurements -> BrickEvent Name Tick -> EventM Name (Next Measurements)
-handleEvent m (AppEvent Tick)                       = liftIO (getCurrentConditions m) >>= continue
-handleEvent m (VtyEvent (V.EvKey (V.KChar 'c') [])) = continue $ toggleColdIon m
-handleEvent m (VtyEvent (V.EvKey (V.KChar 'l') [])) = continue $ toggleLakeShore m
-handleEvent m (VtyEvent (V.EvKey (V.KChar 'g') [])) = continue $ toggleGraphixThree1 m
-handleEvent m (VtyEvent (V.EvKey (V.KChar 't') [])) = continue $ toggleGraphixThree2 m
-handleEvent m (VtyEvent (V.EvKey (V.KChar 'o') [])) = continue $ toggleLogging m
-handleEvent m (VtyEvent (V.EvKey V.KEsc []))        = halt m
-handleEvent m _                                     = continue m
+handleEvent m (AppEvent Tick) =
+   liftIO (getCurrentConditions m) >>= continue
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'c') [])) =
+  continue $ toggleColdIon m
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'c') [V.MCtrl])) =
+  liftIO
+    ( catch (plotter [P.ColdIon] m) (plotterHandler m)
+    ) >>= continue
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'l') [])) =
+  continue $ toggleLakeShore m
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'l') [V.MCtrl])) =
+  liftIO
+    ( catch (plotter [P.LakeShore LS.A, P.LakeShore LS.B] m) (plotterHandler m)
+    ) >>= continue
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'g') [])) =
+  continue $ toggleGraphixThree1 m
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'g') [V.MCtrl])) =
+  liftIO
+    ( catch (plotter [P.GraphixThree1 GT.A, P.GraphixThree1 GT.B, P.GraphixThree1 GT.C] m) (plotterHandler m)
+    ) >>= continue
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar 't') [])) =
+  continue $ toggleGraphixThree2 m
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar 't') [V.MCtrl])) =
+  liftIO
+    ( catch (plotter [P.GraphixThree2 GT.A, P.GraphixThree2 GT.B, P.GraphixThree2 GT.C] m) (plotterHandler m)
+    ) >>= continue
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar 'o') [])) =
+  continue $ toggleLogging m
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar '+') [])) =
+  continue $ incrPlotInterval m
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar '-') [])) =
+  continue $ decrPlotInterval m
+
+handleEvent m (VtyEvent (V.EvKey (V.KChar ' ') [])) =
+  suspendAndResume $ do
+    putStrLn "Suspended! Enter new plot interval in minutes."
+    pI <- getLine
+    let maybeMinutes = (readMaybe :: String -> Maybe Int) pI
+    if isJust maybeMinutes
+      then return $ m & plotInterval .~ fromJust maybeMinutes
+      else return m
+
+handleEvent m (VtyEvent (V.EvKey V.KEsc [])) =
+   halt m
+
+handleEvent m _ =
+   continue m
+
+plotterHandler :: Measurements -> IOError -> IO Measurements
+plotterHandler m e = return $
+    m & onScreenInfo .~ oldOnScreenInfo ++ ["Plotting : FAILED with " ++ show e]
+ where
+   oldOnScreenInfo = m ^. onScreenInfo
 
 -- | Request an update of all currently connected devices.
 -- | This is basically a wrapper function around all the individual update
@@ -548,7 +617,9 @@ getCurrentConditions m = do
       ++
       [head (newGraphixThree2Measurements ^. onScreenInfo)]
       ++
-      ["logging : " ++ show (mOnScreenInfoReset ^. writeLog)]
+      ["Logging       : " ++ show (mOnScreenInfoReset ^. writeLog)]
+      ++
+      ["Plot Interval : " ++ show (mOnScreenInfoReset ^. plotInterval) ++ " min"]
 
   where
     updateColdIonPressure :: Measurements -> IO Measurements
@@ -610,17 +681,27 @@ getCurrentConditions m = do
 {- ======= -}
 {- Logging -}
 {- ======= -}
+-- | Writes a log file with all conditions of the current cycle. Log rotation at
+-- | midnight
 logWriter :: Measurements -> IO ()
 logWriter m = do
-  logAppend <- doesFileExist "./inside.log"
+  -- ask the system for the current day
+  logDate <- do
+    today <- getZonedTime
+    return $ localDay . zonedTimeToLocalTime $ today
+  -- the log name contains the current date. If going beyond midnight, a new
+  -- name will be created and a new log file will be started
+  let logName = "inside_" ++ show logDate ++ ".log"
+
+  logAppend <- doesFileExist logName
 
   if logAppend
     then do
-      logFile <- openFile "./inside.log" AppendMode
+      logFile <- openFile logName AppendMode
       writeLogLine logFile m
       hClose logFile
     else do
-      logFile <- openFile "./inside.log" WriteMode
+      logFile <- openFile logName WriteMode
       writeHeader logFile m
       writeLogLine logFile m
       hClose logFile
@@ -629,7 +710,7 @@ logWriter m = do
     writeHeader :: Handle -> Measurements -> IO ()
     writeHeader handle n = do
       --              time      ci       lsA    lsB      gt1A   gt1B   gt1C     gt2A   gt2B   gt2C
-      hPrintf handle "#%-33s    #%8s    #%8s  #%8s    #%8s  #%8s  #%8s    #%8s  #%8s  #%8s\n"
+      hPrintf handle "#%-33s    #%-8s    #%-8s  #%-8s    #%-8s  #%-8s  #%-8s    #%-8s  #%-8s  #%-8s\n"
         ("Time" :: String) ci lsA lsB gt1A gt1B gt1C gt2A gt2B gt2C
         where
           ci = n ^. coldIon . ciLabel
@@ -646,7 +727,7 @@ logWriter m = do
     writeLogLine handle n = do
       logTime <- getZonedTime
 
-      hPrintf handle "%33s    %8.2e    %8.2f  %8.2f    %8.2e  %8.2e  %8.2e    %8.2e  %8.2e  %8.2e\n"
+      hPrintf handle "%-33s    %8.2e    %8.2f  %8.2f    %8.2e  %8.2e  %8.2e    %8.2e  %8.2e  %8.2e\n"
         (show logTime) ci lsA lsB gt1A gt1B gt1C gt2A gt2B gt2C
 
         where
@@ -664,6 +745,70 @@ toggleLogging :: Measurements -> Measurements
 toggleLogging m = m & writeLog .~ not currVal
   where
     currVal = m ^. writeLog
+
+{- ======== -}
+{- Plotting -}
+{- ======== -}
+-- | plot for a selected device the conditions in the last minutes to a file
+plotter :: [P.PlotDevice] -> Measurements -> IO Measurements
+plotter device m = do
+  -- get the current date to construct the name of the current log file, so that
+  -- only the most recent will be read
+  logDate <- do
+    today <- getZonedTime
+    return $ localDay . zonedTimeToLocalTime $ today
+  let logName = "inside_" ++ show logDate ++ ".log"
+
+  -- read and parse the log file
+  logCont <- T.readFile logName
+  let latestLogP = parseOnly P.parsePlot logCont
+
+  --
+  if isRight latestLogP
+    then do
+      let latestLog = fromRight latestLogP
+          takeable = length latestLog > linesToTake
+
+      if takeable
+        then do
+          let logInInterval = take linesToTake latestLog
+          mapM_ (\d -> P.plotSelectedLogData d logInInterval (devFileName d)) device
+          return $
+            m & onScreenInfo .~ oldOnScreenInfo ++ ["\nPlotting : OK"]
+        else return $
+               m & onScreenInfo .~ oldOnScreenInfo ++ ["\nPlotting : FAILED, not enough lines, need " ++ show linesToTake ++ "lines"]
+    else return $
+           m & onScreenInfo .~ oldOnScreenInfo ++ ["\nPlotting : FAILED, cannot read log file"]
+  where
+    intervalInMins = m ^. plotInterval
+    linesPerMinute =
+      (round :: Double -> Int) $ 60.0 / (fromIntegral tickDistance / 1000000.0) :: Int
+    linesToTake = intervalInMins * linesPerMinute
+    devFileName :: P.PlotDevice -> FilePath
+    devFileName d
+      | d == P.ColdIon = "ColdIonPlot.svg"
+      | d == P.LakeShore LS.A = "LakeShore_A.svg"
+      | d == P.LakeShore LS.B = "LakeShore_B.svg"
+      | d == P.GraphixThree1 GT.A = "GraphixThree1_A.svg"
+      | d == P.GraphixThree1 GT.B = "GraphixThree1_B.svg"
+      | d == P.GraphixThree1 GT.C = "GraphixThree1_C.svg"
+      | d == P.GraphixThree2 GT.A = "GraphixThree2_A.svg"
+      | d == P.GraphixThree2 GT.B = "GraphixThree2_B.svg"
+      | d == P.GraphixThree2 GT.C = "GraphixThree2_C.svg"
+      | otherwise = "IHaveNoIdeaWhatIAmDoingHere.svg"
+    oldOnScreenInfo = m ^. onScreenInfo
+
+incrPlotInterval :: Measurements -> Measurements
+incrPlotInterval m = m & plotInterval .~ (oldInterval + 1)
+  where
+    oldInterval = m ^. plotInterval
+
+decrPlotInterval :: Measurements -> Measurements
+decrPlotInterval m
+  | oldInterval <= 1 = m
+  | otherwise = m & plotInterval .~ (oldInterval - 1)
+  where
+    oldInterval = m ^. plotInterval
 
 {- ======= -}
 {- ColdIon -}
@@ -1133,6 +1278,7 @@ initMeasurement = Measurements
  , _graphixThree2 = initGraphixThree2
  , _writeLog      = False
  , _onScreenInfo  = ["Initialising Programm ..."]
+ , _plotInterval  = 60
  }
 
 
@@ -1147,12 +1293,12 @@ main = do
   -- if configFile exists and is valid, read it, otherwise use the internal
   -- defaults
   startMeasure <-
-        if (length args == 0)
+        if length args == 0
           then return initMeasurement
           else do
             confFile <- T.readFile (head args)
             let confMeasureParse = parseOnly defaultsParser confFile
-            if (isLeft confMeasureParse)
+            if isLeft confMeasureParse
               then do
                 putStrLn "configFile is not valid, using defaults instead"
                 return initMeasurement
@@ -1163,7 +1309,7 @@ main = do
   chan <- newBChan 50
   _ <- forkIO $ forever $ do
          writeBChan chan Tick
-         threadDelay 2500000
+         threadDelay tickDistance
 
   -- execute the TUI with the startMeasure
   void $ customMain (V.mkVty V.defaultConfig) (Just chan) app startMeasure
