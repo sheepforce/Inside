@@ -176,22 +176,22 @@ parseAnswer = do
   answer_ci_data_bs <- Data.Attoparsec.ByteString.Lazy.take 16
   answer_ci_checksum_bs <- Data.Attoparsec.ByteString.Lazy.take 2
 
-  -- transform ci_data from ByteString to DataBytes
-  -- and the checksum to a tuple
-  let ci_data = list2DataBytes . B.unpack $ answer_ci_data_bs
-      ci_checksum =
+  -- | transform ci_data from ByteString to DataBytes
+  -- | and the checksum to a tuple
+  let answer_ci_data = list2DataBytes . B.unpack $ answer_ci_data_bs
+      answer_ci_checksum =
         ( B.unpack answer_ci_checksum_bs !! 0
         , B.unpack answer_ci_checksum_bs !! 1 )
 
-  -- return the answer as a CIString
+  -- | return the answer as a CIString
   return CIString
     { _ci_start = answer_ci_start
     , _ci_header = answer_ci_header
     , _ci_command = (answer_ci_command, answer_ci_subcommand)
     , _ci_adressReceiver = answer_ci_adressReceiver
     , _ci_adressSender = answer_ci_adressSender
-    , _ci_data = ci_data
-    , _ci_checksum = ci_checksum
+    , _ci_data = answer_ci_data
+    , _ci_checksum = answer_ci_checksum
     }
 
 -- | get the pressure from a ByteString only containing DataBytes

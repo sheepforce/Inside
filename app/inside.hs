@@ -1,3 +1,9 @@
+-- | This is the main app. It draws an terminal user interface using the Brick
+-- | library. A request to all enabled devices every 2.5 seconds is hardcoded.
+-- | Enabling and disabling logging, individual devices and reading a
+-- | configuration file is supported. Key bindings for the interaction are shown
+-- | in the ui of the program.
+
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
@@ -116,6 +122,8 @@ data Measurements = Measurements
   } deriving (Show)
 makeLenses ''Measurements
 
+-- | three different types of warning states used for device visualisation in
+-- | the program
 data Warning =
     OK
   | OverThresh
@@ -131,7 +139,7 @@ app :: App Measurements Tick Name
 app = App
   { appDraw         = drawUI                  -- these are the visual elements
                                               -- shown (aka layout), as well as
-                                              -- the functionality the have
+                                              -- the functionality they have
 
   , appChooseCursor = neverShowCursor         -- how to handle the cursor and
                                               -- where it is placed now
@@ -152,7 +160,7 @@ app = App
 hWidgetBoxSize :: Int
 hWidgetBoxSize = 30
 
--- | delay in seconds before new tick is fed into the TUI
+-- | delay in seconds before new tick is fed into the TUI (micro seconds)
 tickDistance :: Int
 tickDistance = 2500000
 
@@ -160,30 +168,35 @@ tickDistance = 2500000
 drawUI :: Measurements -> [Widget Name]
 drawUI m =
   [ BC.center $
+    -- ColdIon widgets
     (
       withBorderStyle BBS.unicodeBold
       $ BB.borderWithLabel (str "ColdIon CU-100")
       $ vBox [coldionWidgetPressure m, hLimit hWidgetBoxSize BB.hBorder, deviceWidgetColdIon m, hLimit hWidgetBoxSize BB.hBorder, coldIonWarningWidget m]
     )
   <+>
+    -- LakeShore widgets
     (
       withBorderStyle BBS.unicodeBold
       $ BB.borderWithLabel (str "LakeShore 335")
       $ vBox [lakeShoreWidgetTemperature m, hLimit hWidgetBoxSize BB.hBorder, deviceWidgetLakeShore m, hLimit hWidgetBoxSize BB.hBorder, lakeShoreWarningWidget m]
     )
   <+>
+    -- GraphixThree1 widgtes
     (
       withBorderStyle BBS.unicodeBold
       $ BB.borderWithLabel (str "GraphixThree (1)")
       $ vBox [graphixThree1WidgetPressure m, hLimit hWidgetBoxSize BB.hBorder, deviceWidgetGraphixThree1 m, hLimit hWidgetBoxSize BB.hBorder, graphixThree1WarningWidget m]
     )
   <+>
+    -- GraphixThree2 widgtes
     (
       withBorderStyle BBS.unicodeBold
       $ BB.borderWithLabel (str "GraphixThree (2)")
       $ vBox [graphixThree2WidgetPressure m, hLimit hWidgetBoxSize BB.hBorder, deviceWidgetGraphixThree2 m, hLimit hWidgetBoxSize BB.hBorder, graphixThree2WarningWidget m]
     )
   <=>
+    -- the on screen logging widget, showing infos about current events
     (
       hLimit ((hWidgetBoxSize + 2) * 4)
       $ withBorderStyle BBS.unicodeBold
@@ -194,6 +207,7 @@ drawUI m =
       $ vBox [ str i | i <- m ^. onScreenInfo]
     )
   <=>
+    -- static widget, only showing key bindings
     (
       hLimit ((hWidgetBoxSize + 2) * 4)
       $ withBorderStyle BBS.unicodeBold
@@ -764,7 +778,8 @@ plotter device m = do
   logCont <- T.readFile logName
   let latestLogP = parseOnly P.parsePlot logCont
 
-  --
+  -- if parsing suceeded, unwrap the log informations and check if enough data
+  -- the plot are present
   if isRight latestLogP
     then do
       let latestLog = fromRight latestLogP

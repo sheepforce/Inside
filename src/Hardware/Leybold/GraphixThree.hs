@@ -67,8 +67,8 @@ crc a =
 parsePressure :: Parser Double
 parsePressure = do
   _ <- word8 0x06 -- \ACK
-  pressure <- double
-  crc <- anyWord8
+  pressureP <- double
+  _ <- anyWord8 -- the CRC
   _ <- word8 0x04 -- \EOT
 
-  return pressure
+  return pressureP
