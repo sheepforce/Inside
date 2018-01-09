@@ -11,3 +11,7 @@ First fully working version of `INSIDE`
 ## 1.1.0.0
 - adding plot function
 - log rotation
+
+## 1.1.1.0
+- optional gnuplot wrapper script for log file plotting
+- source code clean up

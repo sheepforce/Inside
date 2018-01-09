@@ -1,3 +1,6 @@
+-- | plotting routines for visualizing data stored in a log file as written by
+-- | the inside app.
+
 {-# LANGUAGE TemplateHaskell #-}
 
 module Internal.Plotting

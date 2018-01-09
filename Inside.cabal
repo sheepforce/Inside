@@ -3,7 +3,7 @@
 -- see: https://github.com/sol/hpack
 
 name:           Inside
-version:        0.1.1.0
+version:        1.1.1.0
 synopsis:       Short description of your package
 description:    Please see the README on Github at <https://github.com/githubuser/Inside#readme>
 homepage:       https://github.com/githubuser/Inside#readme
