@@ -9,16 +9,16 @@ module Internal.Plotting
 , parsePlot
 , plotSelectedLogData
 ) where
-import           Control.Lens
 import           Data.Attoparsec.Text.Lazy
 import qualified Data.Text                                as T
 import           Data.Time
 import           Data.Time.Calendar.Julian
 import           Graphics.Rendering.Chart.Backend.Cairo   as Cairo
-import           Graphics.Rendering.Chart.Easy
+import           Graphics.Rendering.Chart.Easy            hiding ((^.), _1, _2, _3)
 import qualified Hardware.LakeShore.TemperatureController as LS
 import qualified Hardware.Leybold.GraphixThree            as GT
 import qualified Hardware.Vacom.Coldion                   as CI
+import           Lens.Micro
 
 -- | data format as read from the log file and used by the plotter
 data PlotData = PlotData

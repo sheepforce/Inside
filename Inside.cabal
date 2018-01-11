@@ -32,17 +32,26 @@ library
     , hexstring >= 0.11.1
     , bytestring >= 0.10.8.0
     , bytestring-conversion >= 0.2
-    , lens >= 4.15.0
+    , serialport >= 0.4.7
+    , microlens >= 0.4.8.1
+    , microlens-th >= 0.4.1.1
     , attoparsec >= 0.13.1.0
     , either-unwrap >= 1.1
     , Chart >= 1.8.0
     , Chart-cairo >= 1.8.0
     , text >= 1.2.2.0
     , time >= 1.6.0.0
+    , directory >= 1.3.0.0
+    , brick >= 0.18
+    , vty >= 5.16
     , either-unwrap >= 1.1
   exposed-modules:
       Internal.BinaryMessages
     , Internal.Plotting
+    , Internal.UI.Data
+    , Internal.UI.EventHandling
+    , Internal.UI.Widgets
+    , Internal.UI.Parser
     , Hardware.Vacom.Coldion
     , Hardware.LakeShore.TemperatureController
     , Hardware.Leybold.GraphixThree
@@ -57,15 +66,9 @@ executable inside
   build-depends:
       base >= 4.7 && < 5
     , brick >= 0.18
-    , vty >= 5.16
-    , microlens >= 0.4.8.1
-    , microlens-th >= 0.4.1.1
-    , serialport >= 0.4.7
-    , attoparsec >= 0.13.1.0
-    , either-unwrap >= 1.1
-    , bytestring >= 0.10.8.0
     , text >= 1.2.2.2
-    , time >= 1.6.0.0
-    , directory >= 1.3.0.0
+    , vty >= 5.16
+    , either-unwrap >= 1.1
+    , attoparsec >= 0.13.1.0
     , Inside
   default-language: Haskell2010

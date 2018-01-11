@@ -1,7 +1,6 @@
 -- | Module for talking to the LakeShore 335 TemperatureController. A USB
 -- | interface, which emulates a serial RS232  port
 -- | https://www.lakeshore.com/Documents/335_Manual.pdf
-{-# LANGUAGE TemplateHaskell #-}
 
 module Hardware.LakeShore.TemperatureController
 ( Channel(..)
@@ -10,10 +9,9 @@ module Hardware.LakeShore.TemperatureController
 , parseTemperature
 ) where
 import           Data.Attoparsec.ByteString.Char8
-import           Data.Attoparsec.ByteString.Lazy
 import qualified Data.ByteString                  as B
 import qualified Data.ByteString.Char8            as C
-import           Data.Maybe
+import           Data.Maybe ()
 
 -- | the two channels that are measured when aksing for a temperature
 data Channel = A | B deriving (Show, Eq)
