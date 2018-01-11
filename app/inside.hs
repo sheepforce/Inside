@@ -596,22 +596,22 @@ getCurrentConditions m = do
   newColdIonMeasurements <-
     if (m ^. coldIon . ciEnabled)
       then catch (updateColdIonPressure mOnScreenInfoReset) (ciHandler mOnScreenInfoReset)
-      else return mOnScreenInfoReset
+      else return $ mOnScreenInfoReset & coldIon . ciPressure .~ Nothing
 
   newLakeShoreMeasurements <-
     if (m ^. lakeShore . lsEnabled)
       then catch (updateLakeShoreTemperatures mOnScreenInfoReset) (lsHandler mOnScreenInfoReset)
-      else return mOnScreenInfoReset
+      else return $ mOnScreenInfoReset & lakeShore . lsTemperatures .~ (Nothing, Nothing)
 
   newGraphixThree1Measurements <-
     if (m ^. graphixThree1 . gt1Enabled)
       then catch (updateGraphixThree1Pressures mOnScreenInfoReset) (gt1Handler mOnScreenInfoReset)
-      else return mOnScreenInfoReset
+      else return $ mOnScreenInfoReset & graphixThree1 . gt1Pressures .~ (Nothing, Nothing, Nothing)
 
   newGraphixThree2Measurements <-
     if (mOnScreenInfoReset ^. graphixThree2 . gt2Enabled)
       then catch (updateGraphixThree2Pressures mOnScreenInfoReset) (gt2Handler mOnScreenInfoReset)
-      else return mOnScreenInfoReset
+      else return $ mOnScreenInfoReset & graphixThree2 . gt2Pressures .~ (Nothing, Nothing, Nothing)
 
   if (mOnScreenInfoReset ^. writeLog)
     then logWriter mOnScreenInfoReset
