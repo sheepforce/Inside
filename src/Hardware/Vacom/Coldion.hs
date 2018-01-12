@@ -20,14 +20,14 @@ module Hardware.Vacom.Coldion
 , parsePressure
 , parseName
 ) where
-import           Lens.Micro.TH
-import Lens.Micro
-import qualified Data.ByteString                  as B
 import           Data.Attoparsec.ByteString.Char8
 import           Data.Attoparsec.ByteString.Lazy
+import qualified Data.ByteString                  as B
 import           Data.Maybe
 import           Data.Word
 import           Internal.BinaryMessages
+import           Lens.Micro
+import           Lens.Micro.TH
 
 -- | commands known to the Coldion AND this programm
 data CICommand =
@@ -150,9 +150,9 @@ defCIString =
     , _ciAdressSender   = 0x00
     , _ciCommand        = (0x00, 0x00)
     , _ciData           = ( 0x00, 0x00, 0x00, 0x00
-                           , 0x00, 0x00, 0x00, 0x00
-                           , 0x00, 0x00, 0x00, 0x00
-                           , 0x00, 0x00, 0x00, 0x00 )
+                          , 0x00, 0x00, 0x00, 0x00
+                          , 0x00, 0x00, 0x00, 0x00
+                          , 0x00, 0x00, 0x00, 0x00 )
     , _ciChecksum       = (0x00, 0x00)
     }
 
