@@ -7,7 +7,7 @@ INSIDE monitors three different controllers:
   - [LakeShore 335](https://www.lakeshore.com/products/cryogenic-temperature-controllers/model-335/Pages/Overview.aspx)
   - [Leybold GRAPHIX THREE](https://www.leyboldproducts.uk/products/vacuum-measuring/active-sensors/operating-units-for-active-sensors/operating-units-for-active-sensors/1782/graphix-three) (2 x)
 
-Conditions are periodically updated and warnings are shown, if conditions reach some thresholds. Futhermore all values can be written to a file. Configuration happens via a very simple config file.
+Conditions are periodically updated and warnings are shown, if conditions reach some thresholds. Futhermore all values can be written to a file. Configuration happens via a very simple config file. A website with auto updating plots can be used to follow the conditions in the chamber.
 
 ## Installation
 The programm is written solely in Haskell and built usind the tool `stack`. To install `stack` visit the [installation guide for stack](https://docs.haskellstack.org/en/stable/README/).
@@ -16,18 +16,44 @@ Clone this repository and then build it:
 
     git clone https://github.com/sheepforce/Inside.git
     cd Inside
+    stack install gtk2hs-buildtools
     stack setup
     stack build
     stack install
 
 The commands above may take some time as stack needs to download the compiler, all necessary libraries and compile them.
 
-### Plot-Script (optional)
-If you would like to use the plot script, you will also need GNU `sed`, `gnuplot` and `make`. Simply type
+### Website
+To make it easier to follow trends of conditions in the UHV chamber while working or being remote, a website can be used to visualize conditions. The html document and the javascript function for updating the graphics can be found in `web`. You need a document root for the webserver (like Apache), that is given in `WEBPREFIX` in the `Makefile`. Execute
 
     make
 
-and `insideplot` will be available in `~/.local/bin`. Edit the `Makefile` for special needs.
+and enable this directory in your web server settings. For apache create a configuration (`/etc/apache/sites-available/inside.conf`) with the following content
+
+     <VirtualHost \*:80>
+         ServerAdmin webmaster@localhost
+
+         DocumentRoot /home/user/inside-web # according to whatever you chose in the Makefile
+
+         ErrorLog ${APACHE_LOG_DIR}/error.log
+         CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+         <Directory />
+            Options FollowSymLinks
+            AllowOverride None
+        </Directory>
+
+        <Directory /home/user/inside-web>
+            Options Indexes FollowSymLinks MultiViews
+            AllowOverride None
+            Require all granted
+        </Directory>
+     </VirtualHost>
+
+in `/etc/apache/sites-available` and enable it with
+
+    a2ensite inside.conf
+    systemctl apache2.service reload
 
 ## Usage
 ### inside
@@ -40,17 +66,4 @@ After you have installed the `inside` executable by executing `stack install`, m
 
 You can now execute `inside` for executing the programm with internal defaults or execute `inside /path/to/device.conf` to read the configuration file and overwrite the internal defaults.
 
-### insideplot
-A simple wrapper script for gnuplot comes with this repository. It can plot graphs from the log files written by `inside`. To use it execute `insideplot [filename] [ci][ls][g1][g2]`. Make sure `insideplot` is in your `$PATH`. Here `[filename]` is the path to the log file as written by `inside`. The switches `[ci]`, `[ls]`, `[g1]` and `[g2]` toggle the plotting for the devices.
-- `ci` = ColdIon
-- `ls` = LakeShore
-- `g1` = GraphixThree 1
-- `g2` = GraphixThree 2
-
-For example
-
-    insideplot log.log cils      # plot data from ColdIon and LakeShore
-    insideplot log.log lsg2      # plot data from LakeShore and GraphixThree 1
-    insideplot log.log cilsg1g2  # plot data from all devices
-
-A SVG file named `inside.svg` will be created containing the requested data.
+### insideplotter

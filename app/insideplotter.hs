@@ -33,10 +33,10 @@ data PlotOpts = PlotOpts
 plotOpts = PlotOpts
   { logPath        = "inside"     &= help "directory of the log files"                       &= typ "DIRECTORY"
   , webPath        = "inside-web" &= help "directory of the web contents"                    &= typ "DIRECTORY"
-  , coldIon        = True         &= help "switch to not plot graph for the ColdIon"         &= typ "BOOL"
-  , lakeShore      = True         &= help "switch to not plot graphs for the LakeShore"      &= typ "BOOL"
-  , graphixThree1  = True         &= help "switch to not plot graphs for the GraphixThree 1" &= typ "BOOL"
-  , graphixThree2  = True         &= help "switch to not plot graphs for the GraphixThree 2" &= typ "BOOL"
+  , coldIon        = False        &= help "switch to not plot graph for the ColdIon"         &= typ "BOOL"
+  , lakeShore      = False        &= help "switch to not plot graphs for the LakeShore"      &= typ "BOOL"
+  , graphixThree1  = False        &= help "switch to not plot graphs for the GraphixThree 1" &= typ "BOOL"
+  , graphixThree2  = False        &= help "switch to not plot graphs for the GraphixThree 2" &= typ "BOOL"
   , updateInterval = 5000000      &= help "delay between updating plots"                     &= typ "INT"
   , plotInterval   = 60           &= help "history in minutes to plot"                       &= typ "INT"
   }
@@ -64,13 +64,12 @@ main = do
   arguments <- cmdArgs plotOpts
   let logpath = logPath arguments
       webpath = webPath arguments
-      ciSw = coldIon arguments
-      lsSw = lakeShore arguments
-      gt1Sw = graphixThree1 arguments
-      gt2Sw = graphixThree2 arguments
+      ciSw = not $ coldIon arguments
+      lsSw = not $ lakeShore arguments
+      gt1Sw = not $ graphixThree1 arguments
+      gt2Sw = not $ graphixThree2 arguments
       currentUpdateInterval = updateInterval arguments
       currentPlotInterval = plotInterval arguments
-
 
   -- periodically execute parsing and plotting
   forever $ do
