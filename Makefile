@@ -1,14 +1,12 @@
-PREFIX    = ~/.local/bin
+WEBPREFIX           = ~/inside-web
 
-.PHONY: insideplot
+.PHONY: insideweb
 
-insideplot:
-	cp insideplot.sh $(PREFIX)/insideplot
-	chmod +x $(PREFIX)/insideplot
+insideweb:
+	cp web/inside.html $(WEBPREFIX)/.
+	cp web/reloader.hs $(WEBPREFIX)/.
 
 inside:
-	stack setup
-	stack build
 	stack install
 
-all: insideplot inside
+all: insideweb inside
