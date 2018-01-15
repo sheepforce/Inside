@@ -115,8 +115,8 @@ parsePlot = do
 
 -- | given a device and plot data (as parsed by parsePlot e.g.) it will generate
 -- | and write a graph containing the requested data for the specified device
-plotSelectedLogData :: PlotDevice -> [PlotData] -> FilePath -> IO ()
-plotSelectedLogData d p f = Cairo.toFile filetype f $ do
+plotSelectedLogData :: PlotDevice -> [PlotData] -> Cairo.FileFormat -> FilePath -> IO ()
+plotSelectedLogData d p format file = Cairo.toFile filetype file $ do
   -- attributes for title of the plot
   layout_title .= "INSIDE " ++ show d
   layout_title_style . font_size .= 20.0
@@ -139,7 +139,7 @@ plotSelectedLogData d p f = Cairo.toFile filetype f $ do
     -- plot a SVG file with 600 by 400 pixel width
     filetype = FileOptions
       { _fo_size = (600, 400)
-      , _fo_format = Cairo.SVG
+      , _fo_format = format
       }
 
     -- depending of the selected device the y axis has different values on it

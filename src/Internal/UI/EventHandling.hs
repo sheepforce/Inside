@@ -40,6 +40,7 @@ import qualified Graphics.Vty                             as V
 import           Brick
 import           Control.Monad.IO.Class
 import           Text.Read
+import           Graphics.Rendering.Chart.Backend.Cairo   as Cairo
 
 
 -- | delay in seconds before new tick is fed into the TUI (micro seconds)
@@ -287,7 +288,7 @@ toggleLogging m = m & writeLog .~ not currVal
 {- ======== -}
 -- | plot for a selected device the conditions in the last minutes to a file
 plotter :: [P.PlotDevice] -> Measurements -> IO Measurements
-plotter device m = do
+plotter device m  = do
   -- get the current date to construct the name of the current log file, so that
   -- only the most recent will be read
   logDate <- do
@@ -309,7 +310,7 @@ plotter device m = do
       if takeable
         then do
           let logInInterval = take linesToTake latestLog
-          mapM_ (\d -> P.plotSelectedLogData d logInInterval (devFileName d)) device
+          mapM_ (\d -> P.plotSelectedLogData d logInInterval Cairo.PNG (devFileName d)) device
           return $
             m & onScreenInfo .~ oldOnScreenInfo ++ ["\nPlotting : OK"]
         else return $
@@ -323,16 +324,16 @@ plotter device m = do
     linesToTake = intervalInMins * linesPerMinute
     devFileName :: P.PlotDevice -> FilePath
     devFileName d
-      | d == P.ColdIon = "ColdIonPlot.svg"
-      | d == P.LakeShore LS.A = "LakeShore_A.svg"
-      | d == P.LakeShore LS.B = "LakeShore_B.svg"
-      | d == P.GraphixThree1 GT.A = "GraphixThree1_A.svg"
-      | d == P.GraphixThree1 GT.B = "GraphixThree1_B.svg"
-      | d == P.GraphixThree1 GT.C = "GraphixThree1_C.svg"
-      | d == P.GraphixThree2 GT.A = "GraphixThree2_A.svg"
-      | d == P.GraphixThree2 GT.B = "GraphixThree2_B.svg"
-      | d == P.GraphixThree2 GT.C = "GraphixThree2_C.svg"
-      | otherwise = "IHaveNoIdeaWhatIAmDoingHere.svg"
+      | d == P.ColdIon = "ColdIonPlot.png"
+      | d == P.LakeShore LS.A = "LakeShore_A.png"
+      | d == P.LakeShore LS.B = "LakeShore_B.png"
+      | d == P.GraphixThree1 GT.A = "GraphixThree1_A.png"
+      | d == P.GraphixThree1 GT.B = "GraphixThree1_B.png"
+      | d == P.GraphixThree1 GT.C = "GraphixThree1_C.png"
+      | d == P.GraphixThree2 GT.A = "GraphixThree2_A.png"
+      | d == P.GraphixThree2 GT.B = "GraphixThree2_B.png"
+      | d == P.GraphixThree2 GT.C = "GraphixThree2_C.png"
+      | otherwise = "IHaveNoIdeaWhatIAmDoingHere.png"
     oldOnScreenInfo = m ^. onScreenInfo
 
     -- | handling plotting that is going wrong
