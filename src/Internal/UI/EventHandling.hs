@@ -40,7 +40,7 @@ import qualified Graphics.Vty                             as V
 import           Brick
 import           Control.Monad.IO.Class
 import           Text.Read
-import           Graphics.Rendering.Chart.Backend.Cairo   as Cairo
+import qualified Graphics.Rendering.Chart.Backend.Cairo   as Cairo
 
 
 -- | delay in seconds before new tick is fed into the TUI (micro seconds)

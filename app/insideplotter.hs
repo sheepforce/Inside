@@ -12,8 +12,7 @@ import qualified Hardware.LakeShore.TemperatureController as LS
 import qualified Hardware.Leybold.GraphixThree            as GT
 import qualified Internal.Plotting                        as P
 import           System.Console.CmdArgs
---import           System.Directory
---import           System.IO
+import qualified Graphics.Rendering.Chart.Backend.Cairo   as Cairo
 
 {- ########################################################################## -}
 {- CmdArgs                                                                    -}
@@ -116,27 +115,27 @@ main = do
     if (length interestingLog >= linesToTake)
       then do
         when ciSw $ do
-          P.plotSelectedLogData P.ColdIon interestingLog (webpath ++ "/" ++ "coldion.svg")
+          P.plotSelectedLogData P.ColdIon interestingLog Cairo.PNG (webpath ++ "/" ++ "coldion.png")
           now3 <- getZonedTime
           putStrLn $ show now3 ++ " : plotted ColdIon data"
 
         when lsSw $ do
-          P.plotSelectedLogData (P.LakeShore LS.A) interestingLog (webpath ++ "/" ++ "lakeshorea.svg")
-          P.plotSelectedLogData (P.LakeShore LS.B) interestingLog (webpath ++ "/" ++ "lakeshoreb.svg")
+          P.plotSelectedLogData (P.LakeShore LS.A) interestingLog Cairo.PNG (webpath ++ "/" ++ "lakeshorea.png")
+          P.plotSelectedLogData (P.LakeShore LS.B) interestingLog Cairo.PNG (webpath ++ "/" ++ "lakeshoreb.png")
           now4 <- getZonedTime
           putStrLn $ show now4 ++ " : plotted LakeShore data"
 
         when gt1Sw $ do
-          P.plotSelectedLogData (P.GraphixThree1 GT.A) interestingLog (webpath ++ "/" ++ "graphixthree1a.svg")
-          P.plotSelectedLogData (P.GraphixThree1 GT.B) interestingLog (webpath ++ "/" ++ "graphixthree1b.svg")
-          P.plotSelectedLogData (P.GraphixThree1 GT.C) interestingLog (webpath ++ "/" ++ "graphixthree1c.svg")
+          P.plotSelectedLogData (P.GraphixThree1 GT.A) interestingLog Cairo.PNG (webpath ++ "/" ++ "graphixthree1a.png")
+          P.plotSelectedLogData (P.GraphixThree1 GT.B) interestingLog Cairo.PNG (webpath ++ "/" ++ "graphixthree1b.png")
+          P.plotSelectedLogData (P.GraphixThree1 GT.C) interestingLog Cairo.PNG (webpath ++ "/" ++ "graphixthree1c.png")
           now5 <- getZonedTime
           putStrLn $ show now5 ++ " : plotted GraphixThree1 data"
 
         when gt2Sw $ do
-          P.plotSelectedLogData (P.GraphixThree2 GT.A) interestingLog (webpath ++ "/" ++ "graphixthree2a.svg")
-          P.plotSelectedLogData (P.GraphixThree2 GT.B) interestingLog (webpath ++ "/" ++ "graphixthree2b.svg")
-          P.plotSelectedLogData (P.GraphixThree2 GT.C) interestingLog (webpath ++ "/" ++ "graphixthree2c.svg")
+          P.plotSelectedLogData (P.GraphixThree2 GT.A) interestingLog Cairo.PNG (webpath ++ "/" ++ "graphixthree2a.png")
+          P.plotSelectedLogData (P.GraphixThree2 GT.B) interestingLog Cairo.PNG (webpath ++ "/" ++ "graphixthree2b.png")
+          P.plotSelectedLogData (P.GraphixThree2 GT.C) interestingLog Cairo.PNG (webpath ++ "/" ++ "graphixthree2c.png")
           now6 <- getZonedTime
           putStrLn $ show now6 ++ " : plotted GraphixThree2 data"
       else do

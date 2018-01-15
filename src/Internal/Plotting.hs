@@ -13,7 +13,7 @@ import           Data.Attoparsec.Text.Lazy
 import qualified Data.Text                                as T
 import           Data.Time
 import           Data.Time.Calendar.Julian
-import           Graphics.Rendering.Chart.Backend.Cairo   as Cairo
+import           Graphics.Rendering.Chart.Backend.Cairo
 import           Graphics.Rendering.Chart.Easy            hiding ((^.), _1, _2, _3)
 import qualified Hardware.LakeShore.TemperatureController as LS
 import qualified Hardware.Leybold.GraphixThree            as GT
@@ -115,8 +115,8 @@ parsePlot = do
 
 -- | given a device and plot data (as parsed by parsePlot e.g.) it will generate
 -- | and write a graph containing the requested data for the specified device
-plotSelectedLogData :: PlotDevice -> [PlotData] -> Cairo.FileFormat -> FilePath -> IO ()
-plotSelectedLogData d p format file = Cairo.toFile filetype file $ do
+plotSelectedLogData :: PlotDevice -> [PlotData] -> FileFormat -> FilePath -> IO ()
+plotSelectedLogData d p format file = toFile filetype file $ do
   -- attributes for title of the plot
   layout_title .= "INSIDE " ++ show d
   layout_title_style . font_size .= 20.0
