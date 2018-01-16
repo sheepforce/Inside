@@ -481,20 +481,23 @@ graphixThree1PressureUpdate m = do
 
   -- request pressure from gauge 1
   _ <- send gt1 $ fromJust graphixThreeRequestA
+  threadDelay 10000
   graphixThree1AnswerA <- recv gt1 255
 
   _ <- flush gt1
-  threadDelay 250000
+  threadDelay 240000
 
 -- request pressure from gauge 2
   _ <- send gt1 $ fromJust graphixThreeRequestB
+  threadDelay 10000
   graphixThree1AnswerB <- recv gt1 255
 
   _ <- flush gt1
-  threadDelay 250000
+  threadDelay 240000
 
   -- request pressure from gauge 3
   _ <- send gt1 $ fromJust graphixThreeRequestC
+  threadDelay 10000
   graphixThree1AnswerC <- recv gt1 255
 
   _ <- flush gt1
@@ -549,19 +552,25 @@ graphixThree2PressureUpdate m = do
   threadDelay 50000
 
   _ <- send gt2 $ fromJust graphixThreeRequestA
+  threadDelay 10000
   graphixThree2AnswerA <- recv gt2 255
+  print graphixThree2AnswerA
 
   _ <- flush gt2
-  threadDelay 250000
+  threadDelay 240000
 
   _ <- send gt2 $ fromJust graphixThreeRequestB
+  threadDelay 10000
   graphixThree2AnswerB <- recv gt2 255
+  print graphixThree2AnswerB
 
   _ <- flush gt2
-  threadDelay 250000
+  threadDelay 240000
 
   _ <- send gt2 $ fromJust graphixThreeRequestC
+  threadDelay 10000
   graphixThree2AnswerC <- recv gt2 255
+  print graphixThree2AnswerC
 
   _ <- flush gt2
   closeSerial gt2
