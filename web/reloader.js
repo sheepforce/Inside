@@ -13,5 +13,5 @@ function reloadGraph() {
 
 
    // Start new timer (1 sec)
-   timeoutID = setTimeout('reloadGraph()', 1000);
+   timeoutID = setTimeout('reloadGraph()', 3000);
 }
