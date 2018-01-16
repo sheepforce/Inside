@@ -477,24 +477,27 @@ graphixThree1PressureUpdate :: Measurements -> IO (Maybe Double, Maybe Double, M
 graphixThree1PressureUpdate m = do
   gt1 <- openSerial graphixThree1Port defaultSerialSettings { commSpeed = CS38400 }
 
-  threadDelay 5000
+  threadDelay 50000
 
   -- request pressure from gauge 1
   _ <- send gt1 $ fromJust graphixThreeRequestA
   graphixThree1AnswerA <- recv gt1 255
 
+  _ <- flush gt1
   threadDelay 100000
 
 -- request pressure from gauge 2
   _ <- send gt1 $ fromJust graphixThreeRequestB
   graphixThree1AnswerB <- recv gt1 255
 
+  _ <- flush gt1
   threadDelay 100000
 
   -- request pressure from gauge 3
   _ <- send gt1 $ fromJust graphixThreeRequestC
   graphixThree1AnswerC <- recv gt1 255
 
+  _ <- flush gt1
   closeSerial gt1
 
   let graphixThree1TempA = parseOnly GT.parsePressure graphixThree1AnswerA
@@ -542,19 +545,25 @@ toggleGraphixThree1 m = m & graphixThree1 . gt1Enabled .~ not currVal
 graphixThree2PressureUpdate :: Measurements -> IO (Maybe Double, Maybe Double, Maybe Double)
 graphixThree2PressureUpdate m = do
   gt2 <- openSerial graphixThree2Port defaultSerialSettings { commSpeed = CS38400 }
+
+  threadDelay 50000
+
   _ <- send gt2 $ fromJust graphixThreeRequestA
   graphixThree2AnswerA <- recv gt2 255
 
+  _ <- flush gt2
   threadDelay 100000
 
   _ <- send gt2 $ fromJust graphixThreeRequestB
   graphixThree2AnswerB <- recv gt2 255
 
+  _ <- flush gt2
   threadDelay 100000
 
   _ <- send gt2 $ fromJust graphixThreeRequestC
   graphixThree2AnswerC <- recv gt2 255
 
+  _ <- flush gt2
   closeSerial gt2
 
   let graphixThree2TempA = parseOnly GT.parsePressure graphixThree2AnswerA
