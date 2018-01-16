@@ -507,7 +507,7 @@ graphixThree1PressureUpdate m = do
         then
           if isLeft graphixThree1TempC
             then return (Nothing, Nothing, Nothing)
-            else return (Nothing, Nothing, Just $ fromRight graphixThree1TempA)
+            else return (Nothing, Nothing, Just $ fromRight graphixThree1TempC)
         else
           if isLeft graphixThree1TempC
             then return (Nothing, Just $ fromRight graphixThree1TempB, Nothing)
@@ -567,7 +567,7 @@ graphixThree2PressureUpdate m = do
         then
           if isLeft graphixThree2TempC
             then return (Nothing, Nothing, Nothing)
-            else return (Nothing, Nothing, Just $ fromRight graphixThree2TempA)
+            else return (Nothing, Nothing, Just $ fromRight graphixThree2TempC)
         else
           if isLeft graphixThree2TempC
             then return (Nothing, Just $ fromRight graphixThree2TempB, Nothing)
