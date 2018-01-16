@@ -548,31 +548,23 @@ toggleGraphixThree1 m = m & graphixThree1 . gt1Enabled .~ not currVal
 graphixThree2PressureUpdate :: Measurements -> IO (Maybe Double, Maybe Double, Maybe Double)
 graphixThree2PressureUpdate m = do
   gt2 <- openSerial graphixThree2Port defaultSerialSettings { commSpeed = CS38400 }
-
-  threadDelay 50000
-
   _ <- send gt2 $ fromJust graphixThreeRequestA
   threadDelay 10000
   graphixThree2AnswerA <- recv gt2 255
-  print graphixThree2AnswerA
+  closeSerial gt2
 
-  _ <- flush gt2
   threadDelay 240000
-
+  gt2 <- openSerial graphixThree2Port defaultSerialSettings { commSpeed = CS38400 }
   _ <- send gt2 $ fromJust graphixThreeRequestB
   threadDelay 10000
   graphixThree2AnswerB <- recv gt2 255
-  print graphixThree2AnswerB
+  closeSerial gt2
 
-  _ <- flush gt2
   threadDelay 240000
-
+  gt2 <- openSerial graphixThree2Port defaultSerialSettings { commSpeed = CS38400 }
   _ <- send gt2 $ fromJust graphixThreeRequestC
   threadDelay 10000
   graphixThree2AnswerC <- recv gt2 255
-  print graphixThree2AnswerC
-
-  _ <- flush gt2
   closeSerial gt2
 
   let graphixThree2TempA = parseOnly GT.parsePressure graphixThree2AnswerA
