@@ -193,9 +193,9 @@ plotSelectedLogData d p format file = toFile filetype file $ do
       | d == GraphixThree1 GT.A = p ^. gt1Tags . _1
       | d == GraphixThree1 GT.B = p ^. gt1Tags . _2
       | d == GraphixThree1 GT.C = p ^. gt1Tags . _3
-      | d == GraphixThree2 GT.A = p ^. gt1Tags . _1
-      | d == GraphixThree2 GT.B = p ^. gt1Tags . _2
-      | d == GraphixThree1 GT.C = p ^. gt1Tags . _3
+      | d == GraphixThree2 GT.A = p ^. gt2Tags . _1
+      | d == GraphixThree2 GT.B = p ^. gt2Tags . _2
+      | d == GraphixThree2 GT.C = p ^. gt2Tags . _3
       | otherwise = "no information available"
 
 
