@@ -309,7 +309,8 @@ plotter device m  = do
 
       if takeable
         then do
-          let logLinesInInterval = take linesToTake (P._plotDats latestLog)
+          let logLinesInInterval =
+                drop (length (P._plotDats latestLog) - linesToTake) (P._plotDats latestLog)
               logInInterval = P.PlotData
                 { P._ciTag    = latestLog ^. P.ciTag
                 , P._lsTags   = latestLog ^. P.lsTags
