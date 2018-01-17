@@ -23,16 +23,16 @@ import qualified Brick.Widgets.Border       as BB
 import qualified Brick.Widgets.Border.Style as BBS
 import qualified Brick.Widgets.Center       as BC
 import           Data.Maybe
+import qualified Graphics.Vty               as V
 import           Internal.UI.Data
 import           Lens.Micro
 import           Text.Printf
-import qualified Graphics.Vty                             as V
 
 -- | styles used for the widgets
 theMeasurements :: AttrMap
 theMeasurements = attrMap V.defAttr
   [ ("normalAttr"  :: AttrName, V.white `on` V.black)
-  , ("warnAttr"    :: AttrName, V.blue `on` V.red)
+  , ("warnAttr"    :: AttrName, V.blue `on` V.magenta)
   , ("okAttr"      :: AttrName, V.blue `on` V.green)
   , ("invalidAttr" :: AttrName, V.blue `on` V.yellow)
   ]
