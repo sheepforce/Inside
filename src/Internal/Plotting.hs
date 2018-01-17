@@ -242,17 +242,9 @@ plotSelectedLogData d p format file = toFile filetype file $ do
       | d == GraphixThree2 GT.C = map (^. gt2Pressures . _3) plotDataXY
       | otherwise = error "you have requested to plot data of a device which is unkown"
 
-    -- the time of the day as doubles (0.0=0:00, 0.5=12:00 and 1.0=24:00)
-    timeDaytime =
-      map ((fromRational . timeOfDayToDayFraction . localTimeOfDay) . (^. time)) plotDataXY :: [Double]
-
-    -- the day, counted from the 01.01. of each year, converted from Int to Double
-    timeDate =
-      map (fromIntegral . snd . toJulianYearAndDay . localDay . (^. time)) plotDataXY :: [Double]
-
-    -- the time as double is the x-axis
-    timeFrac = zipWith (+) timeDaytime timeDate
-    plotDataX = timeFrac
+    -- the local time and date
+    plotTime = map _time plotDataXY :: [LocalTime]
+    plotDataX = plotTime
 
     -- zip filtered times with filtered device values
     plottable = zip plotDataX plotDataY
