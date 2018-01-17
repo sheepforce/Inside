@@ -305,11 +305,19 @@ plotter device m  = do
   if isRight latestLogP
     then do
       let latestLog = fromRight latestLogP
-          takeable = length latestLog > linesToTake
+          takeable = length (P._plotDats latestLog) > linesToTake
 
       if takeable
         then do
-          let logInInterval = take linesToTake latestLog
+          let logLinesInInterval = take linesToTake (P._plotDats latestLog)
+              logInInterval = P.PlotData
+                { P._ciTag    = latestLog ^. P.ciTag
+                , P._lsTags   = latestLog ^. P.lsTags
+                , P._gt1Tags  = latestLog ^. P.gt1Tags
+                , P._gt2Tags  = latestLog ^. P.gt2Tags
+                , P._plotDats = logLinesInInterval
+                }
+
           mapM_ (\d -> P.plotSelectedLogData d logInInterval Cairo.SVG (devFileName d)) device
           return $
             m & onScreenInfo .~ oldOnScreenInfo ++ ["\nPlotting : OK"]

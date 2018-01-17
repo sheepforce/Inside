@@ -5,7 +5,13 @@
 
 module Internal.Plotting
 ( PlotDevice(..)
+, PlotLine(..)
 , PlotData(..)
+, ciTag
+, lsTags
+, gt1Tags
+, gt2Tags
+, plotDats
 , parsePlot
 , plotSelectedLogData
 ) where
@@ -20,14 +26,24 @@ import qualified Hardware.Leybold.GraphixThree            as GT
 import qualified Hardware.Vacom.Coldion                   as CI
 import           Lens.Micro
 
--- | data format as read from the log file and used by the plotter
-data PlotData = PlotData
+-- | single line of data from the log file
+data PlotLine = PlotLine
   { _time           :: LocalTime
   , _ciPressure     :: Double
   , _lsTemperatures :: (Double, Double)
   , _gt1Pressures   :: (Double, Double, Double)
   , _gt2Pressures   :: (Double, Double, Double)
   } deriving (Show)
+makeLenses ''PlotLine
+
+-- | multiple lines of plot data and device names. used by the plot function
+data PlotData = PlotData
+  { _ciTag    :: String
+  , _lsTags   :: (String, String)
+  , _gt1Tags  :: (String, String, String)
+  , _gt2Tags  :: (String, String, String)
+  , _plotDats :: [PlotLine]
+  }
 makeLenses ''PlotData
 
 data PlotDevice =
@@ -38,17 +54,44 @@ data PlotDevice =
   deriving (Show, Eq)
 
 -- | parse the log file as written by inside
-parsePlot :: Parser [PlotData]
+parsePlot :: Parser PlotData
 parsePlot = do
   -- the header with the device names
-  _ <- manyTill anyChar endOfLine
+  tags <- nameParser
   skipSpace
   -- many lines of data
   plotData <- many1 dataLineParser
 
-  return plotData
+  return PlotData
+    { _ciTag = tags !! 0
+    , _lsTags = (tags !! 1, tags !! 2)
+    , _gt1Tags = (tags !! 3, tags !! 4, tags !! 5)
+    , _gt2Tags = (tags !! 6, tags !! 7, tags !! 8)
+    , _plotDats = plotData
+    }
 
   where
+    -- parser for the header and device names
+    nameParser :: Parser [String]
+    nameParser = do
+      -- time tag
+      _ <- char '#'
+      _ <- string $ T.pack "Time"
+      skipSpace
+      tags <- count 9 singleNameParser
+
+      return tags
+
+      where
+        singleNameParser :: Parser String
+        singleNameParser = do
+          _ <- char '#'
+          tag <- manyTill anyChar (char ' ')
+          skipSpace
+
+          return tag
+
+
     -- parser for the time at the beginning of each line
     timeParser :: Parser LocalTime
     timeParser = do
@@ -82,7 +125,7 @@ parsePlot = do
         }
 
     -- parse a whole line of data containing all values for all devices
-    dataLineParser :: Parser PlotData
+    dataLineParser :: Parser PlotLine
     dataLineParser = do
       timeP <- timeParser
       skipSpace
@@ -105,7 +148,7 @@ parsePlot = do
       gt2CP <- double     -- graphixThree2 channel C pressure
       endOfLine
 
-      return PlotData
+      return PlotLine
         { _time = timeP
         , _ciPressure = ciP
         , _lsTemperatures = (lsAP, lsBP)
@@ -115,10 +158,10 @@ parsePlot = do
 
 -- | given a device and plot data (as parsed by parsePlot e.g.) it will generate
 -- | and write a graph containing the requested data for the specified device
-plotSelectedLogData :: PlotDevice -> [PlotData] -> FileFormat -> FilePath -> IO ()
+plotSelectedLogData :: PlotDevice -> PlotData -> FileFormat -> FilePath -> IO ()
 plotSelectedLogData d p format file = toFile filetype file $ do
   -- attributes for title of the plot
-  layout_title .= "INSIDE " ++ show d
+  layout_title .= "INSIDE " ++ show d ++ devTag
   layout_title_style . font_size .= 20.0
 
   -- layout of the x axis
@@ -142,6 +185,20 @@ plotSelectedLogData d p format file = toFile filetype file $ do
       , _fo_format = format
       }
 
+    -- the tag for a specific device which is plotted as read from the log file
+    devTag
+      | d == ColdIon = p ^. ciTag
+      | d == LakeShore LS.A = p ^. lsTags . _1
+      | d == LakeShore LS.B = p ^. lsTags . _2
+      | d == GraphixThree1 GT.A = p ^. gt1Tags . _1
+      | d == GraphixThree1 GT.B = p ^. gt1Tags . _2
+      | d == GraphixThree1 GT.C = p ^. gt1Tags . _3
+      | d == GraphixThree2 GT.A = p ^. gt1Tags . _1
+      | d == GraphixThree2 GT.B = p ^. gt1Tags . _2
+      | d == GraphixThree1 GT.C = p ^. gt1Tags . _3
+      | otherwise = "no information available"
+
+
     -- depending of the selected device the y axis has different values on it
     titleY
       | d == ColdIon = "p / mbar"
@@ -155,18 +212,21 @@ plotSelectedLogData d p format file = toFile filetype file $ do
       | d == GraphixThree2 GT.C = "p / mbar"
       | otherwise = "i have no idea what i am plotting here"
 
+    -- intermediate type only containing the data lines
+    pd = p ^. plotDats
+
     -- sort out all data for the selected device which are precisely zero and
     -- therefore considered invalid
     plotDataXY
-      | d == ColdIon = filter (\a -> (a ^. ciPressure) /= 0.0) p
-      | d == LakeShore LS.A = filter (\a -> (a ^. lsTemperatures . _1) /= 0.0) p
-      | d == LakeShore LS.B = filter (\a -> (a ^. lsTemperatures . _2) /= 0.0) p
-      | d == GraphixThree1 GT.A = filter (\a -> (a ^. gt1Pressures . _1) /= 0.0) p
-      | d == GraphixThree1 GT.B = filter (\a -> (a ^. gt1Pressures . _2) /= 0.0) p
-      | d == GraphixThree1 GT.C = filter (\a -> (a ^. gt1Pressures . _3) /= 0.0) p
-      | d == GraphixThree2 GT.A = filter (\a -> (a ^. gt2Pressures . _1) /= 0.0) p
-      | d == GraphixThree2 GT.B = filter (\a -> (a ^. gt2Pressures . _2) /= 0.0) p
-      | d == GraphixThree2 GT.C = filter (\a -> (a ^. gt2Pressures . _3) /= 0.0) p
+      | d == ColdIon = filter (\a -> (a ^. ciPressure) /= 0.0) pd
+      | d == LakeShore LS.A = filter (\a -> (a ^. lsTemperatures . _1) /= 0.0) pd
+      | d == LakeShore LS.B = filter (\a -> (a ^. lsTemperatures . _2) /= 0.0) pd
+      | d == GraphixThree1 GT.A = filter (\a -> (a ^. gt1Pressures . _1) /= 0.0) pd
+      | d == GraphixThree1 GT.B = filter (\a -> (a ^. gt1Pressures . _2) /= 0.0) pd
+      | d == GraphixThree1 GT.C = filter (\a -> (a ^. gt1Pressures . _3) /= 0.0) pd
+      | d == GraphixThree2 GT.A = filter (\a -> (a ^. gt2Pressures . _1) /= 0.0) pd
+      | d == GraphixThree2 GT.B = filter (\a -> (a ^. gt2Pressures . _2) /= 0.0) pd
+      | d == GraphixThree2 GT.C = filter (\a -> (a ^. gt2Pressures . _3) /= 0.0) pd
       | otherwise = error "you have requested to plot data of a device which is unkown"
 
     -- extract device- (and channel-) data from the cleaned data (y-values)

@@ -13,6 +13,7 @@ import qualified Hardware.Leybold.GraphixThree            as GT
 import qualified Internal.Plotting                        as P
 import           System.Console.CmdArgs
 import qualified Graphics.Rendering.Chart.Backend.Cairo   as Cairo
+import Lens.Micro
 
 {- ########################################################################## -}
 {- CmdArgs                                                                    -}
@@ -87,21 +88,22 @@ main = do
         insideOldLogPath = logpath ++ "/" ++ insideOldLogName
 
     now2 <- getZonedTime
-    putStrLn $ show now2 ++ " : reading in log files with names: " ++ insideOldLogName ++ " , " ++ insideOldLogPath
+    putStrLn $ show now2 ++ " : reading in log files with names: " ++ insideLogPath ++ " , " ++ insideOldLogPath
     -- read the log files
     logContent <- catch (T.readFile insideLogPath) logReadHandler
     oldLogContent <- catch (T.readFile insideOldLogPath) logReadHandler
 
-    -- try parsing the log files and combining results
+    -- try parsing the log files and combining the results but only the lines
+    -- tags are only read from todays log file
     let logP = parseOnly P.parsePlot logContent
         oldLogP = parseOnly P.parsePlot oldLogContent
-        logToday
-          | isRight logP = fromRight logP
+        logLinesToday
+          | isRight logP = P._plotDats $ fromRight logP
           | otherwise = []
-        logYesterday
-          | isRight oldLogP = fromRight oldLogP
+        logLinesYesterday
+          | isRight oldLogP = P._plotDats $ fromRight oldLogP
           | otherwise = []
-        completeLog = logYesterday ++ logToday
+        completeLogLines = logLinesYesterday ++ logLinesToday
 
         -- number of lines to read from the plot file
         insideInterval = 2.5 -- delay between updates in the main app in seconds
@@ -109,9 +111,20 @@ main = do
         linesToTake = currentPlotInterval * linesPerMinute
 
         -- the relevant part of the log file for the given time to be plotted
-        interestingLog = drop (length completeLog - linesToTake) completeLog
+        interestingLogLines = drop (length completeLogLines - linesToTake) completeLogLines
 
-    if (length interestingLog >= linesToTake)
+        -- this includes the combined logs from today and yesterday but only the
+        -- names from todays log. Ignore if parsing worked because this is only
+        -- requested if enough lines are present and this is already checked
+        interestingLog = P.PlotData
+          { P._ciTag    = fromRight logP ^. P.ciTag
+          , P._lsTags   = fromRight logP ^. P.lsTags
+          , P._gt1Tags  = fromRight logP ^. P.gt1Tags
+          , P._gt2Tags  = fromRight logP ^. P.gt2Tags
+          , P._plotDats = interestingLogLines
+          }
+
+    if (length interestingLogLines >= linesToTake)
       then do
         when ciSw $ do
           P.plotSelectedLogData P.ColdIon interestingLog Cairo.PNG (webpath ++ "/" ++ "coldion.png")
@@ -139,7 +152,7 @@ main = do
           putStrLn $ show now6 ++ " : plotted GraphixThree2 data"
       else do
         now7 <- getZonedTime
-        putStrLn $ show now7 ++ " : can not plot -> would need " ++ show linesToTake ++ " lines, but i have only " ++ show (length interestingLog) ++ " lines"
+        putStrLn $ show now7 ++ " : can not plot -> would need " ++ show linesToTake ++ " lines, but i have only " ++ show (length interestingLogLines) ++ " lines"
 
 
     now8 <- getZonedTime
