@@ -30,7 +30,7 @@ To make it easier to follow trends of conditions in the UHV chamber while workin
 
 and enable this directory in your web server settings. For apache create a configuration (`/etc/apache/sites-available/inside.conf`) with the following content
 
-     <VirtualHost \*:80>
+     <VirtualHost *:80>
          ServerAdmin webmaster@localhost
 
          DocumentRoot /home/user/inside-web # according to whatever you chose in the Makefile
@@ -67,3 +67,24 @@ After you have installed the `inside` executable by executing `stack install`, m
 You can now execute `inside` for executing the programm with internal defaults or execute `inside /path/to/device.conf` to read the configuration file and overwrite the internal defaults.
 
 ### insideplotter
+`insideplotter` is the program for updating the graphs on the website. It reads the log file written by `inside` and periodically writes new graphes to the specified directory, which should be the root of the web content. It is directly configured with command line arguments.
+
+    insideplotter --help
+
+    Common flags:
+         --logpath=DIRECTORY   directory of the log files
+      -w --webpath=DIRECTORY   directory of the web contents
+      -c --coldion             switch to not plot graph for the ColdIon
+         --lakeshore           switch to not plot graphs for the LakeShore
+         --graphixthree1       switch to not plot graphs for the GraphixThree 1
+         --graphixthree2       switch to not plot graphs for the GraphixThree 2
+      -u --updateinterval=INT  delay between updating plots
+      -p --plotinterval=INT    history in minutes to plot
+      -? --help                Display help message
+      -V --version             Print version information
+
+- `--logpath` is the directory where `inside` writes the log files to
+- `--webpath` is the location of `inside.html` and the directoy that is the `DocumentRoot` of the server
+- `--coldion`, `--lakeshore`, `--graphixthree1`, `--graphixthree2` are switches to disable updates of the graphes of the corresponding device
+- `--updateinterval` is the delay in microseconds between cycles to update the plots
+- `--plotinterval` is the history in minutes to be plotted from the log file

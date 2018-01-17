@@ -161,7 +161,7 @@ parsePlot = do
 plotSelectedLogData :: PlotDevice -> PlotData -> FileFormat -> FilePath -> IO ()
 plotSelectedLogData d p format file = toFile filetype file $ do
   -- attributes for title of the plot
-  layout_title .= "INSIDE " ++ show d ++ devTag
+  layout_title .= "INSIDE " ++ show d ++ " - " ++ devTag
   layout_title_style . font_size .= 20.0
 
   -- layout of the x axis
