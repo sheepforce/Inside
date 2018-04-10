@@ -8,12 +8,12 @@ import           Data.Either.Unwrap
 import qualified Data.Text                                as T
 import qualified Data.Text.IO                             as T
 import           Data.Time
+import qualified Graphics.Rendering.Chart.Backend.Cairo   as Cairo
 import qualified Hardware.LakeShore.TemperatureController as LS
 import qualified Hardware.Leybold.GraphixThree            as GT
 import qualified Internal.Plotting                        as P
+import           Lens.Micro
 import           System.Console.CmdArgs
-import qualified Graphics.Rendering.Chart.Backend.Cairo   as Cairo
-import Lens.Micro
 
 {- ########################################################################## -}
 {- CmdArgs                                                                    -}
@@ -116,13 +116,21 @@ main = do
         -- this includes the combined logs from today and yesterday but only the
         -- names from todays log. Ignore if parsing worked because this is only
         -- requested if enough lines are present and this is already checked
-        interestingLog = P.PlotData
-          { P._ciTag    = fromRight logP ^. P.ciTag
-          , P._lsTags   = fromRight logP ^. P.lsTags
-          , P._gt1Tags  = fromRight logP ^. P.gt1Tags
-          , P._gt2Tags  = fromRight logP ^. P.gt2Tags
-          , P._plotDats = interestingLogLines
-          }
+        interestingLog = if (isRight logP)
+          then P.PlotData
+            { P._ciTag    = fromRight logP ^. P.ciTag
+            , P._lsTags   = fromRight logP ^. P.lsTags
+            , P._gt1Tags  = fromRight logP ^. P.gt1Tags
+            , P._gt2Tags  = fromRight logP ^. P.gt2Tags
+            , P._plotDats = interestingLogLines
+            }
+          else P.PlotData
+            { P._ciTag    = fromRight logP ^. P.ciTag
+            , P._lsTags   = fromRight logP ^. P.lsTags
+            , P._gt1Tags  = fromRight logP ^. P.gt1Tags
+            , P._gt2Tags  = fromRight logP ^. P.gt2Tags
+            , P._plotDats = interestingLogLines
+            }
 
     if (length interestingLogLines >= linesToTake)
       then do
