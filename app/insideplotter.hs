@@ -125,10 +125,10 @@ main = do
             , P._plotDats = interestingLogLines
             }
           else P.PlotData
-            { P._ciTag    = fromRight logP ^. P.ciTag
-            , P._lsTags   = fromRight logP ^. P.lsTags
-            , P._gt1Tags  = fromRight logP ^. P.gt1Tags
-            , P._gt2Tags  = fromRight logP ^. P.gt2Tags
+            { P._ciTag    = "Invalid Header"
+            , P._lsTags   = ("Invalid Header", "Invalid Header")
+            , P._gt1Tags  = ("Invalid Header", "Invalid Header", "Invalid Header")
+            , P._gt2Tags  = ("Invalid Header", "Invalid Header", "Invalid Header")
             , P._plotDats = interestingLogLines
             }
 
